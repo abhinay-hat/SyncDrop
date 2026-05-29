@@ -63,6 +63,10 @@ class SyncPopupWindow: NSObject {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     private func scheduleAutoDismiss() {
         autoDismissTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             self?.panel?.orderOut(nil)

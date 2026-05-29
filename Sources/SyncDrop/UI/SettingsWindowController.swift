@@ -26,7 +26,6 @@ class SettingsWindowController: NSWindowController {
             w.center()
             self.window = w
         }
-        showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
