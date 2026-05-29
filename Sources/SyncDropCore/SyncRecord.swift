@@ -1,14 +1,14 @@
 import Foundation
 
-struct SyncRecord: Codable, Identifiable {
-    let id: UUID
-    let date: Date
-    let fileCount: Int
-    let totalBytes: Int64
-    let durationSeconds: TimeInterval
-    let succeeded: Bool
+public struct SyncRecord: Codable, Identifiable {
+    public let id: UUID
+    public let date: Date
+    public let fileCount: Int
+    public let totalBytes: Int64
+    public let durationSeconds: TimeInterval
+    public let succeeded: Bool
 
-    init(date: Date, fileCount: Int, totalBytes: Int64, durationSeconds: TimeInterval, succeeded: Bool) {
+    public init(date: Date, fileCount: Int, totalBytes: Int64, durationSeconds: TimeInterval, succeeded: Bool) {
         self.id = UUID()
         self.date = date
         self.fileCount = fileCount
@@ -17,7 +17,7 @@ struct SyncRecord: Codable, Identifiable {
         self.succeeded = succeeded
     }
 
-    var formattedDate: String {
+    public var formattedDate: String {
         Self.dateFormatter.string(from: date)
     }
 
@@ -28,11 +28,11 @@ struct SyncRecord: Codable, Identifiable {
         return f
     }()
 
-    var formattedSize: String {
+    public var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
     }
 
-    var formattedDuration: String {
+    public var formattedDuration: String {
         let d = Int(durationSeconds)
         if d < 60 { return "\(d)s" }
         return "\(d / 60)m \(d % 60)s"
