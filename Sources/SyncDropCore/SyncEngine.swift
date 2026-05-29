@@ -95,7 +95,7 @@ public final class SyncEngine: ObservableObject {
     /// Parses an rsync `--progress` output line.
     /// Returns `(filesDone, filesTotal)` when the line contains `to-chk=R/T`,
     /// where filesDone = T - R (remaining).
-    public static func parseProgress(from line: String) -> (filesDone: Int, filesTotal: Int)? {
+    nonisolated public static func parseProgress(from line: String) -> (filesDone: Int, filesTotal: Int)? {
         let pattern = #"to-chk=(\d+)/(\d+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(
