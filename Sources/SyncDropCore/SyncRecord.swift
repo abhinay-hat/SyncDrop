@@ -18,11 +18,15 @@ struct SyncRecord: Codable, Identifiable {
     }
 
     var formattedDate: String {
+        Self.dateFormatter.string(from: date)
+    }
+
+    private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .short
         f.timeStyle = .short
-        return f.string(from: date)
-    }
+        return f
+    }()
 
     var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
