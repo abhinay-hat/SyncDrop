@@ -1,3 +1,0 @@
-module SyncDropCore {
-    header "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/include/SyncDropCore-Swift.h"
-}
