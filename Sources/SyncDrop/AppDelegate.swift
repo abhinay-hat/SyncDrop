@@ -42,6 +42,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if configStore.autoSync {
+            menuBarController.showSyncPopup()
             syncEngine.start()
         } else {
             menuBarController.showSyncPopup()

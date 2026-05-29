@@ -68,12 +68,12 @@ public final class SyncEngine: ObservableObject {
             let text = String(data: data, encoding: .utf8) ?? ""
             for line in text.components(separatedBy: CharacterSet(charactersIn: "\r\n")) {
                 guard !line.isEmpty else { continue }
-                DispatchQueue.main.async { self?.handleOutputLine(line) }
+                Task { @MainActor [weak self] in self?.handleOutputLine(line) }
             }
         }
 
         p.terminationHandler = { [weak self] proc in
-            DispatchQueue.main.async { self?.handleTermination(proc) }
+            Task { @MainActor [weak self] in self?.handleTermination(proc) }
         }
 
         process = p
@@ -120,6 +120,7 @@ public final class SyncEngine: ObservableObject {
     }
 
     private func handleTermination(_ p: Process) {
+        NSLog("[SyncDrop] handleTermination exit=%d reason=%d", p.terminationStatus, p.terminationReason.rawValue)
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil
         var updated = progress
@@ -140,6 +141,7 @@ public final class SyncEngine: ObservableObject {
     }
 
     private func saveRecord(_ p: SyncProgress) {
+        NSLog("[SyncDrop] saveRecord filesDone=%d", p.filesDone)
         configStore.appendSyncRecord(SyncRecord(
             date: Date(),
             fileCount: p.filesDone,
