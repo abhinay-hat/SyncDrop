@@ -17,7 +17,7 @@ class SyncPopupWindow: NSObject {
         NotificationCenter.default.addObserver(
             forName: .syncDidComplete, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.scheduleAutoDismiss()
+            Task { @MainActor [weak self] in self?.scheduleAutoDismiss() }
         }
     }
 
@@ -69,7 +69,7 @@ class SyncPopupWindow: NSObject {
 
     private func scheduleAutoDismiss() {
         autoDismissTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
-            self?.panel?.orderOut(nil)
+            Task { @MainActor [weak self] in self?.panel?.orderOut(nil) }
         }
     }
 }
