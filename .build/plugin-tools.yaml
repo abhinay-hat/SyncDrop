@@ -1,0 +1,153 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "PackageStructure": ["<PackageStructure>"]
+  "SyncDrop-arm64-apple-macosx26.0-release.exe": ["<SyncDrop-arm64-apple-macosx26.0-release.exe>"]
+  "SyncDrop-arm64-apple-macosx26.0-release.module": ["<SyncDrop-arm64-apple-macosx26.0-release.module>"]
+  "SyncDropCore-arm64-apple-macosx26.0-release.module": ["<SyncDropCore-arm64-apple-macosx26.0-release.module>"]
+  "SyncDropPackageTests-arm64-apple-macosx26.0-release.module": ["<SyncDropPackageTests-arm64-apple-macosx26.0-release.module>"]
+  "SyncDropPackageTests-arm64-apple-macosx26.0-release.test": ["<SyncDropPackageTests-arm64-apple-macosx26.0-release.test>"]
+  "SyncDropTests-arm64-apple-macosx26.0-release.module": ["<SyncDropTests-arm64-apple-macosx26.0-release.module>"]
+  "main": ["<SyncDrop-arm64-apple-macosx26.0-release.exe>","<SyncDrop-arm64-apple-macosx26.0-release.module>","<SyncDropCore-arm64-apple-macosx26.0-release.module>"]
+  "test": ["<SyncDrop-arm64-apple-macosx26.0-release.exe>","<SyncDrop-arm64-apple-macosx26.0-release.module>","<SyncDropCore-arm64-apple-macosx26.0-release.module>","<SyncDropPackageTests-arm64-apple-macosx26.0-release.test>","<SyncDropTests-arm64-apple-macosx26.0-release.module>"]
+default: "main"
+nodes:
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/AppDelegate.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/SyncDropApp.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/System/LoginItemManager.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/MenuBarController.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsView.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsWindowController.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupContentView.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupWindow.swift"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/sources"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/sources"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/AppDelegate.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/LoginItemManager.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/MenuBarController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsWindowController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncDropApp.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupContentView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupWindow.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.product/Objects.LinkFileList"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/ConfigStore.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncEngine.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncProgress.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncRecord.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/VolumeMonitor.swift"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/sources"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/sources"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.derived/runner.swift"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/sources"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/sources"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.derived/runner.swift":
+    tool: test-entry-point-tool
+    inputs: []
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.derived/runner.swift"]
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/runner.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/ConfigStoreTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncEngineTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncProgressTests.swift.o"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.product/Objects.LinkFileList"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/ConfigStoreTests.swift","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncEngineTests.swift","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncProgressTests.swift"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/sources"]
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/sources"
+
+  "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Library/Developer/CommandLineTools/usr/bin/swiftc"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt"
+
+  "<SyncDrop-arm64-apple-macosx26.0-release.exe>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop"]
+    outputs: ["<SyncDrop-arm64-apple-macosx26.0-release.exe>"]
+
+  "<SyncDrop-arm64-apple-macosx26.0-release.module>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/AppDelegate.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncDropApp.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/LoginItemManager.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/MenuBarController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsWindowController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupContentView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupWindow.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDrop.swiftmodule"]
+    outputs: ["<SyncDrop-arm64-apple-macosx26.0-release.module>"]
+
+  "<SyncDropCore-arm64-apple-macosx26.0-release.module>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropCore.swiftmodule"]
+    outputs: ["<SyncDropCore-arm64-apple-macosx26.0-release.module>"]
+
+  "<SyncDropPackageTests-arm64-apple-macosx26.0-release.module>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/runner.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropPackageTests.swiftmodule"]
+    outputs: ["<SyncDropPackageTests-arm64-apple-macosx26.0-release.module>"]
+
+  "<SyncDropPackageTests-arm64-apple-macosx26.0-release.test>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.xctest/Contents/MacOS/SyncDropPackageTests"]
+    outputs: ["<SyncDropPackageTests-arm64-apple-macosx26.0-release.test>"]
+
+  "<SyncDropTests-arm64-apple-macosx26.0-release.module>":
+    tool: phony
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/ConfigStoreTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncEngineTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncProgressTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropTests.swiftmodule"]
+    outputs: ["<SyncDropTests-arm64-apple-macosx26.0-release.module>"]
+
+  "C.SyncDrop-arm64-apple-macosx26.0-release.exe":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/AppDelegate.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/LoginItemManager.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/MenuBarController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsWindowController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncDropApp.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupContentView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupWindow.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.product/Objects.LinkFileList"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop"]
+    description: "Linking ./.build/arm64-apple-macosx/release/SyncDrop"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-L","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release","-o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop","-module-name","SyncDrop","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-dead_strip","-Xlinker","-alias","-Xlinker","_SyncDrop_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.product/Objects.LinkFileList","-target","arm64-apple-macosx13.0","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.SyncDrop-arm64-apple-macosx26.0-release.module":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/AppDelegate.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/SyncDropApp.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/System/LoginItemManager.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/MenuBarController.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsView.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsWindowController.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupContentView.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupWindow.swift","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropCore.swiftmodule","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/sources"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/AppDelegate.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncDropApp.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/LoginItemManager.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/MenuBarController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SettingsWindowController.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupContentView.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/SyncPopupWindow.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDrop.swiftmodule"]
+    description: "Compiling Swift Module 'SyncDrop' (8 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","SyncDrop","-emit-dependencies","-emit-module","-emit-module-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDrop.swiftmodule","-output-file-map","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/output-file-map.json","-whole-module-optimization","-num-threads","10","-c","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDrop.build/sources","-I","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","10","-serialize-diagnostics","-O","-j10","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","SyncDrop_main","-swift-version","5","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","syncdrop"]
+
+  "C.SyncDropCore-arm64-apple-macosx26.0-release.module":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/ConfigStore.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncEngine.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncProgress.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncRecord.swift","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/VolumeMonitor.swift","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/sources"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropCore.swiftmodule"]
+    description: "Compiling Swift Module 'SyncDropCore' (5 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","SyncDropCore","-emit-dependencies","-emit-module","-emit-module-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropCore.swiftmodule","-output-file-map","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/output-file-map.json","-parse-as-library","-whole-module-optimization","-num-threads","10","-c","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/sources","-I","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","10","-serialize-diagnostics","-O","-j10","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/include/SyncDropCore-Swift.h","-swift-version","5","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","syncdrop"]
+
+  "C.SyncDropPackageTests-arm64-apple-macosx26.0-release.module":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.derived/runner.swift","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropTests.swiftmodule","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/sources"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/runner.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropPackageTests.swiftmodule"]
+    description: "Compiling Swift Module 'SyncDropPackageTests' (1 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","SyncDropPackageTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropPackageTests.swiftmodule","-output-file-map","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/output-file-map.json","-parse-as-library","-whole-module-optimization","-num-threads","10","-c","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/sources","-I","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","10","-serialize-diagnostics","-O","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j10","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/include/SyncDropPackageTests-Swift.h","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","syncdrop"]
+
+  "C.SyncDropPackageTests-arm64-apple-macosx26.0-release.test":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/ConfigStore.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncEngine.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncProgress.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/SyncRecord.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/VolumeMonitor.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.build/runner.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/ConfigStoreTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncEngineTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncProgressTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.product/Objects.LinkFileList"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.xctest/Contents/MacOS/SyncDropPackageTests"]
+    description: "Linking ./.build/arm64-apple-macosx/release/SyncDropPackageTests.xctest/Contents/MacOS/SyncDropPackageTests"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-L","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release","-o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.xctest/Contents/MacOS/SyncDropPackageTests","-module-name","SyncDropPackageTests","-Xlinker","-no_warn_duplicate_libraries","-Xlinker","-bundle","-Xlinker","-dead_strip","-Xlinker","-rpath","-Xlinker","@loader_path/../../../","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropPackageTests.product/Objects.LinkFileList","-target","arm64-apple-macosx13.0","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.SyncDropTests-arm64-apple-macosx26.0-release.module":
+    tool: shell
+    inputs: ["/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/ConfigStoreTests.swift","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncEngineTests.swift","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncProgressTests.swift","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropCore.swiftmodule","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/sources"]
+    outputs: ["/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/ConfigStoreTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncEngineTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/SyncProgressTests.swift.o","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropTests.swiftmodule"]
+    description: "Compiling Swift Module 'SyncDropTests' (3 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","SyncDropTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules/SyncDropTests.swiftmodule","-output-file-map","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/output-file-map.json","-parse-as-library","-whole-module-optimization","-num-threads","10","-c","@/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropTests.build/sources","-I","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","10","-serialize-diagnostics","-index-store-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/index/store","-O","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j10","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-parse-as-library","-swift-version","5","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","syncdrop"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/","/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/","/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/","/Users/padidamabhinay/SyncDrop/Package.swift","/Users/padidamabhinay/SyncDrop/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+

@@ -1,0 +1,61 @@
+{
+  "": {
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/master.swiftdeps"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/AppDelegate.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/AppDelegate.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/AppDelegate.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/AppDelegate~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/AppDelegate.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/AppDelegate.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/SyncDropApp.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncDropApp.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncDropApp.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncDropApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncDropApp.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncDropApp.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/System/LoginItemManager.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/LoginItemManager.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/LoginItemManager.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/LoginItemManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/LoginItemManager.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/LoginItemManager.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/MenuBarController.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/MenuBarController.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/MenuBarController.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/MenuBarController~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/MenuBarController.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/MenuBarController.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsView.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsView.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsView.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsView.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SettingsWindowController.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsWindowController.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsWindowController.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsWindowController~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsWindowController.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SettingsWindowController.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupContentView.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupContentView.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupContentView.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupContentView~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupContentView.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupContentView.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDrop/UI/SyncPopupWindow.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupWindow.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupWindow.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupWindow~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupWindow.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDrop.build/SyncPopupWindow.dia"
+  }
+}

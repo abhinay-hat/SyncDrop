@@ -1,0 +1,40 @@
+{
+  "": {
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/master.swiftdeps"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/ConfigStore.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/ConfigStore.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/ConfigStore.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/ConfigStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/ConfigStore.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/ConfigStore.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncEngine.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncEngine.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncEngine.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncEngine.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncEngine.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncProgress.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncProgress.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncProgress.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncProgress~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncProgress.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncProgress.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/SyncRecord.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncRecord.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncRecord.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncRecord~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncRecord.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/SyncRecord.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Sources/SyncDropCore/VolumeMonitor.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/VolumeMonitor.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/VolumeMonitor.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/VolumeMonitor~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/VolumeMonitor.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropCore.build/VolumeMonitor.dia"
+  }
+}

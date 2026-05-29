@@ -1,0 +1,26 @@
+{
+  "": {
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/master.swiftdeps"
+  },
+  "/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/ConfigStoreTests.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/ConfigStoreTests.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/ConfigStoreTests.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/ConfigStoreTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/ConfigStoreTests.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/ConfigStoreTests.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncEngineTests.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncEngineTests.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncEngineTests.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncEngineTests.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncEngineTests.dia"
+  },
+  "/Users/padidamabhinay/SyncDrop/Tests/SyncDropTests/SyncProgressTests.swift": {
+    "dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncProgressTests.d",
+    "object": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncProgressTests.swift.o",
+    "swiftmodule": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncProgressTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncProgressTests.swiftdeps",
+    "diagnostics": "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/debug/SyncDropTests.build/SyncProgressTests.dia"
+  }
+}

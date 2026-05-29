@@ -1,0 +1,3 @@
+module SyncDropCore {
+    header "/Users/padidamabhinay/SyncDrop/.build/arm64-apple-macosx/release/SyncDropCore.build/include/SyncDropCore-Swift.h"
+}
