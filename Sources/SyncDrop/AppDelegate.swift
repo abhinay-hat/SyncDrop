@@ -19,8 +19,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         requestNotificationPermission()
         menuBarController.setup()
-        volumeMonitor.start()
 
+        // Subscriptions BEFORE start() so initial mount event isn't missed
         volumeMonitor.$ssdConnected
             .filter { $0 }
             .receive(on: DispatchQueue.main)
@@ -32,6 +32,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.syncEngine.cancel() }
             .store(in: &cancellables)
+
+        volumeMonitor.start()
     }
 
     private func handleSSDConnected() {
