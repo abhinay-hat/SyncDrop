@@ -1,7 +1,8 @@
 import Foundation
 import Combine
 
-public class ConfigStore: ObservableObject {
+@MainActor
+public final class ConfigStore: ObservableObject {
     private let defaults: UserDefaults
 
     @Published public var sourcePath: String {
