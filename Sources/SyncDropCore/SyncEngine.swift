@@ -14,11 +14,14 @@ public final class SyncEngine: ObservableObject {
         self.configStore = configStore
     }
 
+    /// Convenience: build args using the current date for the backup dir.
+    public var rsyncArgs: [String] { rsyncArgs(date: Date()) }
+
     /// Builds the rsync argument list.
     /// exFAT-safe: omits -a (which sets -p/-o/-g and breaks on exFAT with
     /// EPERM). Uses --modify-window=1 to handle exFAT's 2-second timestamp
     /// granularity and avoid re-copying unchanged files every run.
-    public var rsyncArgs: [String] {
+    public func rsyncArgs(date: Date) -> [String] {
         var args = [
             "-rltDv",
             "--no-perms",
@@ -32,9 +35,21 @@ public final class SyncEngine: ObservableObject {
         for pattern in configStore.excludes where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
             args.append("--exclude=\(pattern)")
         }
+        if configStore.keepVersions {
+            args.append("--backup")
+            args.append("--backup-dir=.syncdrop_archive/\(Self.backupDateString(date))")
+        }
         // Trailing slash on source tells rsync to copy *contents*, not the dir itself
         args += [configStore.expandedSourcePath + "/", configStore.destPath]
         return args
+    }
+
+    nonisolated public static func backupDateString(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone.current
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: date)
     }
 
     public func start() {
@@ -53,7 +68,8 @@ public final class SyncEngine: ObservableObject {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        p.arguments = rsyncArgs
+        let syncStartDate = Date()
+        p.arguments = rsyncArgs(date: syncStartDate)
 
         // openrsync (macOS) writes progress to stdout. Capturing stdout+stderr on the
         // SAME pipe causes exit 1 (shared FD breaks internal multiplexing). Fix:

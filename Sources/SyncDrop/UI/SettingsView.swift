@@ -109,6 +109,8 @@ private struct BehaviorTab: View {
                 Toggle("Notify when sync completes", isOn: $configStore.notifyOnComplete)
                 Toggle("Eject SSD after sync completes", isOn: $configStore.autoEject)
                     .help("Automatically ejects the SSD when a sync finishes successfully.")
+                Toggle("Keep versions of replaced files", isOn: $configStore.keepVersions)
+                    .help("Moves overwritten/deleted files into .syncdrop_archive/<date> on the SSD instead of discarding them.")
             }
             Section("System") {
                 Toggle("Launch at login", isOn: Binding(

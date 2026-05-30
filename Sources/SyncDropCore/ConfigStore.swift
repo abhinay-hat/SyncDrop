@@ -29,6 +29,9 @@ public final class ConfigStore: ObservableObject {
     @Published public var autoEject: Bool {
         didSet { defaults.set(autoEject, forKey: Keys.autoEject) }
     }
+    @Published public var keepVersions: Bool {
+        didSet { defaults.set(keepVersions, forKey: Keys.keepVersions) }
+    }
     @Published public var excludes: [String] {
         didSet {
             if let data = try? JSONEncoder().encode(excludes) {
@@ -53,6 +56,7 @@ public final class ConfigStore: ObservableObject {
         static let notifyOnComplete = "notifyOnComplete"
         static let launchAtLogin = "launchAtLogin"
         static let autoEject = "autoEject"
+        static let keepVersions = "keepVersions"
         static let excludes = "excludes"
         static let syncHistory = "syncHistory"
     }
@@ -67,6 +71,7 @@ public final class ConfigStore: ObservableObject {
         self.notifyOnComplete = defaults.object(forKey: Keys.notifyOnComplete) as? Bool ?? true
         self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
         self.autoEject = defaults.bool(forKey: Keys.autoEject)
+        self.keepVersions = defaults.bool(forKey: Keys.keepVersions)
         if let data = defaults.data(forKey: Keys.excludes),
            let stored = try? JSONDecoder().decode([String].self, from: data) {
             self.excludes = stored

@@ -87,4 +87,25 @@ final class SyncEngineTests: XCTestCase {
         let args = engine.rsyncArgs
         XCTAssertEqual(args.filter { $0.hasPrefix("--exclude=") }, ["--exclude=real"])
     }
+
+    func test_rsyncArgs_keepVersionsOff_noBackup() {
+        configStore.keepVersions = false
+        let args = engine.rsyncArgs
+        XCTAssertFalse(args.contains("--backup"))
+        XCTAssertFalse(args.contains { $0.hasPrefix("--backup-dir=") })
+    }
+
+    func test_rsyncArgs_keepVersionsOn_addsBackupDir() {
+        configStore.keepVersions = true
+        let date = ISO8601DateFormatter().date(from: "2026-05-30T12:00:00Z")!
+        let args = engine.rsyncArgs(date: date)
+        XCTAssertTrue(args.contains("--backup"))
+        XCTAssertTrue(args.contains("--backup-dir=.syncdrop_archive/2026-05-30"))
+    }
+
+    func test_backupDateString_formatsYYYYMMDD() {
+        let date = ISO8601DateFormatter().date(from: "2026-01-09T00:00:00Z")!
+        let s = SyncEngine.backupDateString(date)
+        XCTAssertTrue(s.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
+    }
 }
