@@ -8,6 +8,10 @@ struct SyncPopupContentView: View {
     let onStart: () -> Void
     let onDismiss: () -> Void
 
+    @State private var isPreviewing = false
+    @State private var dryRunResult: DryRunResult?
+    @State private var previewError: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             headerRow
@@ -16,6 +20,16 @@ struct SyncPopupContentView: View {
         }
         .padding(18)
         .frame(width: 380)
+        .sheet(item: $dryRunResult) { result in
+            DryRunSheet(
+                result: result,
+                onConfirm: {
+                    dryRunResult = nil
+                    onStart()
+                },
+                onCancel: { dryRunResult = nil }
+            )
+        }
     }
 
     private var headerRow: some View {
@@ -45,12 +59,49 @@ struct SyncPopupContentView: View {
     private var confirmView: some View {
         VStack(alignment: .leading, spacing: 10) {
             pathRow
+            if let previewError {
+                Text(previewError)
+                    .font(.caption2).foregroundColor(.red).lineLimit(2)
+            }
             HStack {
                 Button("Cancel", action: onDismiss).keyboardShortcut(.cancelAction)
                 Spacer()
+                Button {
+                    runPreview()
+                } label: {
+                    if isPreviewing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Preview…")
+                    }
+                }
+                .disabled(isPreviewing || configStore.destPath.isEmpty)
                 Button("Start Sync", action: onStart)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
+                    .disabled(configStore.destPath.isEmpty)
+            }
+        }
+    }
+
+    private func runPreview() {
+        previewError = nil
+        isPreviewing = true
+        let source = configStore.expandedSourcePath
+        let dest = configStore.destPath
+        let args = syncEngine.rsyncArgs
+        Task {
+            do {
+                let result = try await DryRunEngine().preview(source: source, dest: dest, args: args)
+                await MainActor.run {
+                    isPreviewing = false
+                    dryRunResult = result
+                }
+            } catch {
+                await MainActor.run {
+                    isPreviewing = false
+                    previewError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
             }
         }
     }
