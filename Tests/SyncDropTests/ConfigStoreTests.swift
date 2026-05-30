@@ -19,6 +19,7 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertFalse(store.mirrorMode)
         XCTAssertTrue(store.notifyOnComplete)
         XCTAssertTrue(store.syncHistory.isEmpty)
+        XCTAssertFalse(store.autoEject)
         XCTAssertEqual(store.excludes, [".DS_Store", ".Spotlight-V100", ".fseventsd", ".Trashes", "node_modules"])
     }
 
@@ -45,5 +46,11 @@ final class ConfigStoreTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "SyncDropTests")!
         let reloaded = ConfigStore(defaults: defaults)
         XCTAssertEqual(reloaded.excludes, ["*.tmp", "build"])
+    }
+
+    func test_autoEject_saveAndLoad() {
+        store.autoEject = true
+        let reloaded = ConfigStore(defaults: UserDefaults(suiteName: "SyncDropTests")!)
+        XCTAssertTrue(reloaded.autoEject)
     }
 }

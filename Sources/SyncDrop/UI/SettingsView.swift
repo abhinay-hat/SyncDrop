@@ -107,6 +107,8 @@ private struct BehaviorTab: View {
                 Toggle("Mirror mode — delete files removed from Mac", isOn: $configStore.mirrorMode)
                     .help("Adds --delete to rsync. Files deleted on Mac are also deleted from SSD.")
                 Toggle("Notify when sync completes", isOn: $configStore.notifyOnComplete)
+                Toggle("Eject SSD after sync completes", isOn: $configStore.autoEject)
+                    .help("Automatically ejects the SSD when a sync finishes successfully.")
             }
             Section("System") {
                 Toggle("Launch at login", isOn: Binding(
