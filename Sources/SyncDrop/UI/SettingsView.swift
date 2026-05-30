@@ -46,6 +46,28 @@ private struct FoldersTab: View {
                     Button("Choose…") { pickDest() }
                 }
             }
+            Section("Exclude Patterns") {
+                ForEach(configStore.excludes.indices, id: \.self) { index in
+                    HStack {
+                        TextField("pattern", text: Binding(
+                            get: { configStore.excludes[index] },
+                            set: { configStore.excludes[index] = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        Button(role: .destructive) {
+                            configStore.excludes.remove(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                Button {
+                    configStore.excludes.append("")
+                } label: {
+                    Label("Add Pattern", systemImage: "plus")
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(.horizontal)

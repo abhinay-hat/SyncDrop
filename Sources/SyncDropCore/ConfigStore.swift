@@ -26,6 +26,13 @@ public final class ConfigStore: ObservableObject {
     @Published public var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
+    @Published public var excludes: [String] {
+        didSet {
+            if let data = try? JSONEncoder().encode(excludes) {
+                defaults.set(data, forKey: Keys.excludes)
+            }
+        }
+    }
     @Published public var syncHistory: [SyncRecord] = [] {
         didSet {
             if let data = try? JSONEncoder().encode(syncHistory) {
@@ -42,6 +49,7 @@ public final class ConfigStore: ObservableObject {
         static let mirrorMode = "mirrorMode"
         static let notifyOnComplete = "notifyOnComplete"
         static let launchAtLogin = "launchAtLogin"
+        static let excludes = "excludes"
         static let syncHistory = "syncHistory"
     }
 
@@ -54,6 +62,12 @@ public final class ConfigStore: ObservableObject {
         self.mirrorMode = defaults.bool(forKey: Keys.mirrorMode)
         self.notifyOnComplete = defaults.object(forKey: Keys.notifyOnComplete) as? Bool ?? true
         self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
+        if let data = defaults.data(forKey: Keys.excludes),
+           let stored = try? JSONDecoder().decode([String].self, from: data) {
+            self.excludes = stored
+        } else {
+            self.excludes = [".DS_Store", ".Spotlight-V100", ".fseventsd", ".Trashes", "node_modules"]
+        }
         if let data = defaults.data(forKey: Keys.syncHistory),
            let records = try? JSONDecoder().decode([SyncRecord].self, from: data) {
             self.syncHistory = records

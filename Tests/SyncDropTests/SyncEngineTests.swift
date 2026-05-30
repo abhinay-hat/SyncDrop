@@ -66,4 +66,25 @@ final class SyncEngineTests: XCTestCase {
             return
         }
     }
+
+    func test_rsyncArgs_includesExcludePatterns() {
+        configStore.excludes = [".DS_Store", "node_modules"]
+        let args = engine.rsyncArgs
+        XCTAssertTrue(args.contains("--exclude=.DS_Store"))
+        XCTAssertTrue(args.contains("--exclude=node_modules"))
+    }
+
+    func test_rsyncArgs_excludesBeforeSourceDest() {
+        configStore.excludes = ["node_modules"]
+        let args = engine.rsyncArgs
+        let excludeIdx = args.firstIndex(of: "--exclude=node_modules")!
+        let sourceIdx = args.firstIndex(where: { $0.contains("Desktop/Projects") })!
+        XCTAssertLessThan(excludeIdx, sourceIdx)
+    }
+
+    func test_rsyncArgs_skipsBlankExcludes() {
+        configStore.excludes = ["", "  ", "real"]
+        let args = engine.rsyncArgs
+        XCTAssertEqual(args.filter { $0.hasPrefix("--exclude=") }, ["--exclude=real"])
+    }
 }

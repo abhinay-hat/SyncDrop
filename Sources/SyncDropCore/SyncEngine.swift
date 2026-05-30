@@ -29,6 +29,9 @@ public final class SyncEngine: ObservableObject {
             "--stats"
         ]
         if configStore.mirrorMode { args.append("--delete") }
+        for pattern in configStore.excludes where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
+            args.append("--exclude=\(pattern)")
+        }
         // Trailing slash on source tells rsync to copy *contents*, not the dir itself
         args += [configStore.expandedSourcePath + "/", configStore.destPath]
         return args

@@ -19,6 +19,7 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertFalse(store.mirrorMode)
         XCTAssertTrue(store.notifyOnComplete)
         XCTAssertTrue(store.syncHistory.isEmpty)
+        XCTAssertEqual(store.excludes, [".DS_Store", ".Spotlight-V100", ".fseventsd", ".Trashes", "node_modules"])
     }
 
     func test_savingAndLoading_sourcePath() {
@@ -37,5 +38,12 @@ final class ConfigStoreTests: XCTestCase {
         store.sourcePath = "~/Desktop/Projects"
         XCTAssertTrue(store.expandedSourcePath.hasPrefix("/Users/"))
         XCTAssertFalse(store.expandedSourcePath.contains("~"))
+    }
+
+    func test_excludes_saveAndLoad() {
+        store.excludes = ["*.tmp", "build"]
+        let defaults = UserDefaults(suiteName: "SyncDropTests")!
+        let reloaded = ConfigStore(defaults: defaults)
+        XCTAssertEqual(reloaded.excludes, ["*.tmp", "build"])
     }
 }
