@@ -52,8 +52,11 @@ public final class SyncEngine: ObservableObject {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         p.arguments = rsyncArgs
 
+        // macOS openrsync uses stdout for its local client↔server protocol.
+        // Capturing stdout with a Pipe breaks it (exit 1, io_read errors).
+        // Send stdout to /dev/null explicitly; capture stderr for progress/stats.
         let pipe = Pipe()
-        p.standardOutput = pipe
+        p.standardOutput = FileHandle.nullDevice
         p.standardError = pipe
         outputPipe = pipe
 
@@ -120,7 +123,6 @@ public final class SyncEngine: ObservableObject {
     }
 
     private func handleTermination(_ p: Process) {
-        NSLog("[SyncDrop] handleTermination exit=%d reason=%d", p.terminationStatus, p.terminationReason.rawValue)
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil
         var updated = progress
@@ -141,7 +143,6 @@ public final class SyncEngine: ObservableObject {
     }
 
     private func saveRecord(_ p: SyncProgress) {
-        NSLog("[SyncDrop] saveRecord filesDone=%d", p.filesDone)
         configStore.appendSyncRecord(SyncRecord(
             date: Date(),
             fileCount: p.filesDone,
