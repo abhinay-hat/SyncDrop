@@ -40,7 +40,10 @@ final class SyncEngineTests: XCTestCase {
 
     func test_rsyncArgs_noMinusA() {
         XCTAssertFalse(engine.rsyncArgs.contains("-a"))
-        XCTAssertFalse(engine.rsyncArgs.contains { $0.hasPrefix("-") && $0.contains("a") })
+        // Only bundled short-flag groups (e.g. "-rltDv") must not contain 'a';
+        // long options like "--stats" are exempt.
+        let shortFlagGroups = engine.rsyncArgs.filter { $0.hasPrefix("-") && !$0.hasPrefix("--") }
+        XCTAssertFalse(shortFlagGroups.contains { $0.contains("a") })
     }
 
     func test_parseProgress_extractsFileCount() {
