@@ -42,8 +42,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if configStore.autoSync {
+            syncEngine.start()  // start first so state = .running when popup renders
             menuBarController.showSyncPopup()
-            syncEngine.start()
         } else {
             menuBarController.showSyncPopup()
         }

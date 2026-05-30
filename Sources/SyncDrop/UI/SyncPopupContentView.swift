@@ -69,11 +69,29 @@ struct SyncPopupContentView: View {
     }
 
     private var progressView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ProgressView(value: syncEngine.progress.percentComplete).progressViewStyle(.linear)
+        VStack(alignment: .leading, spacing: 6) {
+            if syncEngine.progress.filesTotal > 0 {
+                ProgressView(value: syncEngine.progress.percentComplete)
+                    .progressViewStyle(.linear)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
             HStack {
-                Text("\(syncEngine.progress.filesDone) / \(max(syncEngine.progress.filesTotal, 1)) files")
-                    .font(.caption).foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    if syncEngine.progress.filesTotal > 0 {
+                        Text("\(syncEngine.progress.filesDone) / \(syncEngine.progress.filesTotal) files")
+                            .font(.caption).foregroundColor(.secondary)
+                    } else {
+                        Text("Preparing…")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
+                    if !syncEngine.progress.currentFile.isEmpty {
+                        Text(syncEngine.progress.currentFile)
+                            .font(.caption2).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                }
                 Spacer()
                 Button("Cancel") { syncEngine.cancel(); onDismiss() }.font(.caption)
             }

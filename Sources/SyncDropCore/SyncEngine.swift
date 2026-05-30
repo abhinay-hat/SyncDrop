@@ -52,12 +52,12 @@ public final class SyncEngine: ObservableObject {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         p.arguments = rsyncArgs
 
-        // macOS openrsync uses stdout for its local client↔server protocol.
-        // Capturing stdout with a Pipe breaks it (exit 1, io_read errors).
-        // Send stdout to /dev/null explicitly; capture stderr for progress/stats.
+        // openrsync (macOS) writes progress to stdout. Capturing stdout+stderr on the
+        // SAME pipe causes exit 1 (shared FD breaks internal multiplexing). Fix:
+        // stdout = Pipe (progress), stderr = /dev/null (discard error text).
         let pipe = Pipe()
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = pipe
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
         outputPipe = pipe
 
         var initial = SyncProgress()
@@ -65,13 +65,19 @@ public final class SyncEngine: ObservableObject {
         initial.startTime = Date()
         progress = initial
 
+        // Buffer partial lines — rsync progress (to-check=N/T) can split across reads.
+        // Use a Box to allow safe mutation from the readabilityHandler closure.
+        final class Box { var value = "" }
+        let lineBuffer = Box()
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            let text = String(data: data, encoding: .utf8) ?? ""
-            for line in text.components(separatedBy: CharacterSet(charactersIn: "\r\n")) {
-                guard !line.isEmpty else { continue }
-                Task { @MainActor [weak self] in self?.handleOutputLine(line) }
+            lineBuffer.value += String(data: data, encoding: .utf8) ?? ""
+            let parts = lineBuffer.value.components(separatedBy: CharacterSet(charactersIn: "\r\n"))
+            lineBuffer.value = parts.last ?? ""
+            for line in parts.dropLast() where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                let captured = line
+                Task { @MainActor [weak self] in self?.handleOutputLine(captured) }
             }
         }
 
@@ -96,21 +102,20 @@ public final class SyncEngine: ObservableObject {
     }
 
     /// Parses an rsync `--progress` output line.
-    /// Returns `(filesDone, filesTotal)` when the line contains `to-chk=R/T`,
-    /// where filesDone = T - R (remaining).
+    /// GNU rsync:   `to-chk=N/T`  → N = remaining, filesDone = T - N
+    /// openrsync:   `to-check=N/T` → N = done,      filesDone = N
     nonisolated public static func parseProgress(from line: String) -> (filesDone: Int, filesTotal: Int)? {
-        let pattern = #"to-chk=(\d+)/(\d+)"#
+        let pattern = #"to-(chk|check)=(\d+)/(\d+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(
-                in: line,
-                range: NSRange(line.startIndex..., in: line)
-              ),
-              let remainingRange = Range(match.range(at: 1), in: line),
-              let totalRange = Range(match.range(at: 2), in: line),
-              let remaining = Int(line[remainingRange]),
-              let total = Int(line[totalRange])
+              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let typeRange = Range(match.range(at: 1), in: line),
+              let nRange = Range(match.range(at: 2), in: line),
+              let tRange = Range(match.range(at: 3), in: line),
+              let n = Int(line[nRange].replacingOccurrences(of: ",", with: "")),
+              let t = Int(line[tRange].replacingOccurrences(of: ",", with: ""))
         else { return nil }
-        return (filesDone: total - remaining, filesTotal: total)
+        let isOpenRsync = line[typeRange] == "check"
+        return (filesDone: isOpenRsync ? n : (t - n), filesTotal: t)
     }
 
     // MARK: - Private
@@ -119,6 +124,20 @@ public final class SyncEngine: ObservableObject {
         if let parsed = SyncEngine.parseProgress(from: line) {
             progress.filesDone = parsed.filesDone
             progress.filesTotal = parsed.filesTotal
+        } else if line.hasPrefix("Transfer starting:") {
+            // "Transfer starting: N files" — set total early for better UX
+            let words = line.components(separatedBy: " ")
+            if let idx = words.firstIndex(of: "files"), idx > 0,
+               let count = Int(words[idx - 1]) {
+                progress.filesTotal = count
+            }
+        } else if !line.hasPrefix(" ") && !line.hasPrefix("Number") &&
+                  !line.hasPrefix("Total") && !line.hasPrefix("Transfer") &&
+                  !line.hasPrefix("sent") && !line.hasPrefix("Unmatched") &&
+                  !line.hasPrefix("Matched") && !line.hasPrefix("File list") &&
+                  !line.isEmpty {
+            // Plain filename lines
+            progress.currentFile = line.hasPrefix("./") ? String(line.dropFirst(2)) : line
         }
     }
 
