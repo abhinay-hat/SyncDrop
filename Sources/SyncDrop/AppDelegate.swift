@@ -43,11 +43,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleSSDConnected() {
-        guard !configStore.destPath.isEmpty else {
+        guard !configStore.activeProfile.destPath.isEmpty else {
             menuBarController.openSettings()
             return
         }
-        if configStore.autoSync {
+        if configStore.activeProfile.autoSync {
             syncEngine.start()  // start first so state = .running when popup renders
             menuBarController.showSyncPopup()
         } else {
@@ -56,8 +56,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleSyncCompleted() {
-        guard configStore.autoEject else { return }
-        let path = "/Volumes/\(configStore.ssdName.trimmingCharacters(in: .whitespaces))"
+        let profile = configStore.activeProfile
+        guard profile.autoEject else { return }
+        let path = "/Volumes/\(profile.ssdName.trimmingCharacters(in: .whitespaces))"
         do {
             try NSWorkspace.shared.unmountAndEjectDevice(at: URL(fileURLWithPath: path))
         } catch {

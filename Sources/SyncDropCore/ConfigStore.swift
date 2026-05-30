@@ -5,39 +5,19 @@ import Combine
 public final class ConfigStore: ObservableObject {
     private let defaults: UserDefaults
 
-    @Published public var sourcePath: String {
-        didSet { defaults.set(sourcePath, forKey: Keys.sourcePath) }
+    @Published public var profiles: [SyncProfile] {
+        didSet { persistProfiles() }
     }
-    @Published public var ssdName: String {
-        didSet { defaults.set(ssdName, forKey: Keys.ssdName) }
+    @Published public var activeProfileId: UUID {
+        didSet { defaults.set(activeProfileId.uuidString, forKey: Keys.activeProfileId) }
     }
-    @Published public var destPath: String {
-        didSet { defaults.set(destPath, forKey: Keys.destPath) }
-    }
-    @Published public var autoSync: Bool {
-        didSet { defaults.set(autoSync, forKey: Keys.autoSync) }
-    }
-    @Published public var mirrorMode: Bool {
-        didSet { defaults.set(mirrorMode, forKey: Keys.mirrorMode) }
-    }
+
+    // Global (not per-profile) settings.
     @Published public var notifyOnComplete: Bool {
         didSet { defaults.set(notifyOnComplete, forKey: Keys.notifyOnComplete) }
     }
     @Published public var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
-    }
-    @Published public var autoEject: Bool {
-        didSet { defaults.set(autoEject, forKey: Keys.autoEject) }
-    }
-    @Published public var keepVersions: Bool {
-        didSet { defaults.set(keepVersions, forKey: Keys.keepVersions) }
-    }
-    @Published public var excludes: [String] {
-        didSet {
-            if let data = try? JSONEncoder().encode(excludes) {
-                defaults.set(data, forKey: Keys.excludes)
-            }
-        }
     }
     @Published public var syncHistory: [SyncRecord] = [] {
         didSet {
@@ -48,49 +28,152 @@ public final class ConfigStore: ObservableObject {
     }
 
     private enum Keys {
-        static let sourcePath = "sourcePath"
-        static let ssdName = "ssdName"
-        static let destPath = "destPath"
-        static let autoSync = "autoSync"
-        static let mirrorMode = "mirrorMode"
+        static let profiles = "profiles"
+        static let activeProfileId = "activeProfileId"
         static let notifyOnComplete = "notifyOnComplete"
         static let launchAtLogin = "launchAtLogin"
-        static let autoEject = "autoEject"
-        static let keepVersions = "keepVersions"
-        static let excludes = "excludes"
         static let syncHistory = "syncHistory"
+        // Legacy v1 keys (used only for one-time migration).
+        static let legacySourcePath = "sourcePath"
+        static let legacySsdName = "ssdName"
+        static let legacyDestPath = "destPath"
+        static let legacyAutoSync = "autoSync"
+        static let legacyMirrorMode = "mirrorMode"
+        static let legacyExcludes = "excludes"
+        static let legacyAutoEject = "autoEject"
+        static let legacyKeepVersions = "keepVersions"
     }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.sourcePath = defaults.string(forKey: Keys.sourcePath) ?? "~/Desktop/Projects"
-        self.ssdName = defaults.string(forKey: Keys.ssdName) ?? "Extreme Pro"
-        self.destPath = defaults.string(forKey: Keys.destPath) ?? ""
-        self.autoSync = defaults.bool(forKey: Keys.autoSync)
-        self.mirrorMode = defaults.bool(forKey: Keys.mirrorMode)
+
+        // Load globals first.
         self.notifyOnComplete = defaults.object(forKey: Keys.notifyOnComplete) as? Bool ?? true
         self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
-        self.autoEject = defaults.bool(forKey: Keys.autoEject)
-        self.keepVersions = defaults.bool(forKey: Keys.keepVersions)
-        if let data = defaults.data(forKey: Keys.excludes),
-           let stored = try? JSONDecoder().decode([String].self, from: data) {
-            self.excludes = stored
+
+        // Load profiles, or migrate from v1, or seed a default.
+        let resolvedProfiles: [SyncProfile]
+        if let data = defaults.data(forKey: Keys.profiles),
+           let stored = try? JSONDecoder().decode([SyncProfile].self, from: data),
+           !stored.isEmpty {
+            resolvedProfiles = stored
+        } else if let migrated = ConfigStore.migrateLegacyProfile(from: defaults) {
+            resolvedProfiles = [migrated]
         } else {
-            self.excludes = [".DS_Store", ".Spotlight-V100", ".fseventsd", ".Trashes", "node_modules"]
+            resolvedProfiles = [SyncProfile(name: "Default")]
         }
+        self.profiles = resolvedProfiles
+
+        // Resolve active profile id; fall back to first profile.
+        if let idString = defaults.string(forKey: Keys.activeProfileId),
+           let id = UUID(uuidString: idString),
+           resolvedProfiles.contains(where: { $0.id == id }) {
+            self.activeProfileId = id
+        } else {
+            self.activeProfileId = resolvedProfiles[0].id
+        }
+
+        // Load history.
         if let data = defaults.data(forKey: Keys.syncHistory),
            let records = try? JSONDecoder().decode([SyncRecord].self, from: data) {
             self.syncHistory = records
         }
+
+        // `didSet` does not fire during `init`. On a fresh install persist the
+        // seeded profiles + active id so we don't regenerate a new UUID every launch.
+        if defaults.data(forKey: Keys.profiles) == nil {
+            if let data = try? JSONEncoder().encode(self.profiles) {
+                defaults.set(data, forKey: Keys.profiles)
+            }
+            defaults.set(self.activeProfileId.uuidString, forKey: Keys.activeProfileId)
+        }
+
+        // If we migrated from v1, persist profiles + clear legacy keys (once).
+        finishMigrationIfNeeded()
     }
 
+    // MARK: - Active profile
+
+    public var activeProfile: SyncProfile {
+        get {
+            profiles.first(where: { $0.id == activeProfileId }) ?? profiles[0]
+        }
+        set {
+            if let idx = profiles.firstIndex(where: { $0.id == newValue.id }) {
+                profiles[idx] = newValue
+            } else {
+                profiles.append(newValue)
+            }
+        }
+    }
+
+    /// Convenience helper retained from v1 — now reads the active profile.
     public var expandedSourcePath: String {
-        (sourcePath as NSString).expandingTildeInPath
+        activeProfile.expandedSourcePath
     }
 
     public func appendSyncRecord(_ record: SyncRecord) {
         var history = syncHistory
         history.insert(record, at: 0)
         syncHistory = Array(history.prefix(20))
+    }
+
+    // MARK: - Profile management
+
+    public func addProfile(name: String = "New Profile") {
+        profiles.append(SyncProfile(name: name))
+    }
+
+    public func deleteProfile(id: UUID) {
+        guard profiles.count > 1 else { return }
+        profiles.removeAll { $0.id == id }
+        if activeProfileId == id {
+            activeProfileId = profiles[0].id
+        }
+    }
+
+    // MARK: - Persistence & migration
+
+    private func persistProfiles() {
+        if let data = try? JSONEncoder().encode(profiles) {
+            defaults.set(data, forKey: Keys.profiles)
+        }
+    }
+
+    nonisolated private static func migrateLegacyProfile(from defaults: UserDefaults) -> SyncProfile? {
+        guard let legacySource = defaults.string(forKey: Keys.legacySourcePath) else {
+            return nil
+        }
+        let legacyExcludes: [String]
+        if let data = defaults.data(forKey: Keys.legacyExcludes),
+           let stored = try? JSONDecoder().decode([String].self, from: data) {
+            legacyExcludes = stored
+        } else {
+            legacyExcludes = [".DS_Store", ".Spotlight-V100", ".fseventsd", ".Trashes", "node_modules"]
+        }
+        return SyncProfile(
+            name: "Default",
+            sourcePath: legacySource,
+            destPath: defaults.string(forKey: Keys.legacyDestPath) ?? "",
+            ssdName: defaults.string(forKey: Keys.legacySsdName) ?? "Extreme Pro",
+            mirrorMode: defaults.bool(forKey: Keys.legacyMirrorMode),
+            autoSync: defaults.bool(forKey: Keys.legacyAutoSync),
+            autoEject: defaults.bool(forKey: Keys.legacyAutoEject),
+            keepVersions: defaults.bool(forKey: Keys.legacyKeepVersions),
+            excludes: legacyExcludes
+        )
+    }
+
+    private func finishMigrationIfNeeded() {
+        guard defaults.string(forKey: Keys.legacySourcePath) != nil else { return }
+        persistProfiles()
+        defaults.set(activeProfileId.uuidString, forKey: Keys.activeProfileId)
+        for key in [
+            Keys.legacySourcePath, Keys.legacySsdName, Keys.legacyDestPath,
+            Keys.legacyAutoSync, Keys.legacyMirrorMode, Keys.legacyExcludes,
+            Keys.legacyAutoEject, Keys.legacyKeepVersions
+        ] {
+            defaults.removeObject(forKey: key)
+        }
     }
 }

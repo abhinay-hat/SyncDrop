@@ -46,7 +46,7 @@ public final class VolumeMonitor: ObservableObject {
             includingResourceValuesForKeys: nil,
             options: .skipHiddenVolumes
         ) ?? []
-        for url in urls where url.lastPathComponent == configStore.ssdName {
+        for url in urls where url.lastPathComponent == configStore.activeProfile.ssdName {
             ssdMountURL = url
             ssdConnected = true
             return
@@ -55,7 +55,7 @@ public final class VolumeMonitor: ObservableObject {
 
     private func handleMount(_ notification: Notification) {
         guard let url = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
-        if url.lastPathComponent == configStore.ssdName {
+        if url.lastPathComponent == configStore.activeProfile.ssdName {
             ssdMountURL = url
             ssdConnected = true
         }
@@ -63,7 +63,7 @@ public final class VolumeMonitor: ObservableObject {
 
     private func handleUnmount(_ notification: Notification) {
         guard let url = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
-        if url.lastPathComponent == configStore.ssdName {
+        if url.lastPathComponent == configStore.activeProfile.ssdName {
             ssdMountURL = nil
             ssdConnected = false
         }

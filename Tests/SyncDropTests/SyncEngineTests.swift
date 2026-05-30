@@ -10,13 +10,22 @@ final class SyncEngineTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "SyncEngineTests")!
         defaults.removePersistentDomain(forName: "SyncEngineTests")
         configStore = ConfigStore(defaults: defaults)
-        configStore.sourcePath = "~/Desktop/Projects"
-        configStore.destPath = "/Volumes/Extreme Pro/Projects"
+        var p = configStore.activeProfile
+        p.sourcePath = "~/Desktop/Projects"
+        p.destPath = "/Volumes/Extreme Pro/Projects"
+        p.excludes = []
+        configStore.activeProfile = p
         engine = SyncEngine(configStore: configStore)
     }
 
+    private func setProfile(_ mutate: (inout SyncProfile) -> Void) {
+        var p = configStore.activeProfile
+        mutate(&p)
+        configStore.activeProfile = p
+    }
+
     func test_rsyncArgs_noMirrorMode_noDelete() {
-        configStore.mirrorMode = false
+        setProfile { $0.mirrorMode = false }
         let args = engine.rsyncArgs
         XCTAssertFalse(args.contains("--delete"))
         XCTAssertTrue(args.contains("-rltDv"))
@@ -27,7 +36,7 @@ final class SyncEngineTests: XCTestCase {
     }
 
     func test_rsyncArgs_mirrorMode_addsDelete() {
-        configStore.mirrorMode = true
+        setProfile { $0.mirrorMode = true }
         XCTAssertTrue(engine.rsyncArgs.contains("--delete"))
     }
 
@@ -40,10 +49,50 @@ final class SyncEngineTests: XCTestCase {
 
     func test_rsyncArgs_noMinusA() {
         XCTAssertFalse(engine.rsyncArgs.contains("-a"))
-        // Only bundled short-flag groups (e.g. "-rltDv") must not contain 'a';
-        // long options like "--stats" are exempt.
         let shortFlagGroups = engine.rsyncArgs.filter { $0.hasPrefix("-") && !$0.hasPrefix("--") }
         XCTAssertFalse(shortFlagGroups.contains { $0.contains("a") })
+    }
+
+    func test_rsyncArgs_includesExcludePatterns() {
+        setProfile { $0.excludes = [".DS_Store", "node_modules"] }
+        let args = engine.rsyncArgs
+        XCTAssertTrue(args.contains("--exclude=.DS_Store"))
+        XCTAssertTrue(args.contains("--exclude=node_modules"))
+    }
+
+    func test_rsyncArgs_excludesBeforeSourceDest() {
+        setProfile { $0.excludes = ["node_modules"] }
+        let args = engine.rsyncArgs
+        let excludeIdx = args.firstIndex(of: "--exclude=node_modules")!
+        let sourceIdx = args.firstIndex(where: { $0.contains("Desktop/Projects") })!
+        XCTAssertLessThan(excludeIdx, sourceIdx)
+    }
+
+    func test_rsyncArgs_skipsBlankExcludes() {
+        setProfile { $0.excludes = ["", "  ", "real"] }
+        let args = engine.rsyncArgs
+        XCTAssertEqual(args.filter { $0.hasPrefix("--exclude=") }, ["--exclude=real"])
+    }
+
+    func test_rsyncArgs_keepVersionsOff_noBackup() {
+        setProfile { $0.keepVersions = false }
+        let args = engine.rsyncArgs
+        XCTAssertFalse(args.contains("--backup"))
+        XCTAssertFalse(args.contains { $0.hasPrefix("--backup-dir=") })
+    }
+
+    func test_rsyncArgs_keepVersionsOn_addsBackupDir() {
+        setProfile { $0.keepVersions = true }
+        let date = ISO8601DateFormatter().date(from: "2026-05-30T12:00:00Z")!
+        let args = engine.rsyncArgs(date: date)
+        XCTAssertTrue(args.contains("--backup"))
+        XCTAssertTrue(args.contains("--backup-dir=.syncdrop_archive/2026-05-30"))
+    }
+
+    func test_backupDateString_formatsYYYYMMDD() {
+        let date = ISO8601DateFormatter().date(from: "2026-01-09T00:00:00Z")!
+        let s = SyncEngine.backupDateString(date)
+        XCTAssertTrue(s.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
     }
 
     func test_parseProgress_extractsFileCount() {
@@ -65,47 +114,5 @@ final class SyncEngineTests: XCTestCase {
             XCTFail("Expected idle, got \(engine.progress.state)")
             return
         }
-    }
-
-    func test_rsyncArgs_includesExcludePatterns() {
-        configStore.excludes = [".DS_Store", "node_modules"]
-        let args = engine.rsyncArgs
-        XCTAssertTrue(args.contains("--exclude=.DS_Store"))
-        XCTAssertTrue(args.contains("--exclude=node_modules"))
-    }
-
-    func test_rsyncArgs_excludesBeforeSourceDest() {
-        configStore.excludes = ["node_modules"]
-        let args = engine.rsyncArgs
-        let excludeIdx = args.firstIndex(of: "--exclude=node_modules")!
-        let sourceIdx = args.firstIndex(where: { $0.contains("Desktop/Projects") })!
-        XCTAssertLessThan(excludeIdx, sourceIdx)
-    }
-
-    func test_rsyncArgs_skipsBlankExcludes() {
-        configStore.excludes = ["", "  ", "real"]
-        let args = engine.rsyncArgs
-        XCTAssertEqual(args.filter { $0.hasPrefix("--exclude=") }, ["--exclude=real"])
-    }
-
-    func test_rsyncArgs_keepVersionsOff_noBackup() {
-        configStore.keepVersions = false
-        let args = engine.rsyncArgs
-        XCTAssertFalse(args.contains("--backup"))
-        XCTAssertFalse(args.contains { $0.hasPrefix("--backup-dir=") })
-    }
-
-    func test_rsyncArgs_keepVersionsOn_addsBackupDir() {
-        configStore.keepVersions = true
-        let date = ISO8601DateFormatter().date(from: "2026-05-30T12:00:00Z")!
-        let args = engine.rsyncArgs(date: date)
-        XCTAssertTrue(args.contains("--backup"))
-        XCTAssertTrue(args.contains("--backup-dir=.syncdrop_archive/2026-05-30"))
-    }
-
-    func test_backupDateString_formatsYYYYMMDD() {
-        let date = ISO8601DateFormatter().date(from: "2026-01-09T00:00:00Z")!
-        let s = SyncEngine.backupDateString(date)
-        XCTAssertTrue(s.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
     }
 }

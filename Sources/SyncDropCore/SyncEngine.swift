@@ -22,6 +22,7 @@ public final class SyncEngine: ObservableObject {
     /// EPERM). Uses --modify-window=1 to handle exFAT's 2-second timestamp
     /// granularity and avoid re-copying unchanged files every run.
     public func rsyncArgs(date: Date) -> [String] {
+        let profile = configStore.activeProfile
         var args = [
             "-rltDv",
             "--no-perms",
@@ -31,16 +32,16 @@ public final class SyncEngine: ObservableObject {
             "--progress",
             "--stats"
         ]
-        if configStore.mirrorMode { args.append("--delete") }
-        for pattern in configStore.excludes where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
+        if profile.mirrorMode { args.append("--delete") }
+        for pattern in profile.excludes where !pattern.trimmingCharacters(in: .whitespaces).isEmpty {
             args.append("--exclude=\(pattern)")
         }
-        if configStore.keepVersions {
+        if profile.keepVersions {
             args.append("--backup")
             args.append("--backup-dir=.syncdrop_archive/\(Self.backupDateString(date))")
         }
         // Trailing slash on source tells rsync to copy *contents*, not the dir itself
-        args += [configStore.expandedSourcePath + "/", configStore.destPath]
+        args += [profile.expandedSourcePath + "/", profile.destPath]
         return args
     }
 
@@ -54,14 +55,15 @@ public final class SyncEngine: ObservableObject {
 
     public func start() {
         guard process?.isRunning != true else { return }
-        guard !configStore.expandedSourcePath.isEmpty,
-              !configStore.destPath.isEmpty else {
+        let profile = configStore.activeProfile
+        guard !profile.expandedSourcePath.isEmpty,
+              !profile.destPath.isEmpty else {
             progress.state = .error("Source or destination path not configured")
             return
         }
 
         try? FileManager.default.createDirectory(
-            atPath: configStore.destPath,
+            atPath: profile.destPath,
             withIntermediateDirectories: true,
             attributes: nil
         )

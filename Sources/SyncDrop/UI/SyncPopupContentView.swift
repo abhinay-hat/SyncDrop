@@ -38,7 +38,7 @@ struct SyncPopupContentView: View {
                 .font(.title2)
                 .foregroundColor(.accentColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(configStore.ssdName).font(.headline)
+                Text(configStore.activeProfile.ssdName).font(.headline)
                 Text("External SSD detected").font(.caption).foregroundColor(.secondary)
             }
             Spacer()
@@ -75,11 +75,11 @@ struct SyncPopupContentView: View {
                         Text("Preview…")
                     }
                 }
-                .disabled(isPreviewing || configStore.destPath.isEmpty)
+                .disabled(isPreviewing || configStore.activeProfile.destPath.isEmpty)
                 Button("Start Sync", action: onStart)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(configStore.destPath.isEmpty)
+                    .disabled(configStore.activeProfile.destPath.isEmpty)
             }
         }
     }
@@ -88,7 +88,7 @@ struct SyncPopupContentView: View {
         previewError = nil
         isPreviewing = true
         let source = configStore.expandedSourcePath
-        let dest = configStore.destPath
+        let dest = configStore.activeProfile.destPath
         let args = syncEngine.rsyncArgs
         Task {
             do {
@@ -108,13 +108,13 @@ struct SyncPopupContentView: View {
 
     private var pathRow: some View {
         HStack(spacing: 4) {
-            Text(configStore.sourcePath)
+            Text(configStore.activeProfile.sourcePath)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.middle)
             Image(systemName: "arrow.right").font(.caption2).foregroundColor(.secondary)
-            Text(configStore.destPath.isEmpty ? "Not configured" : configStore.destPath)
+            Text(configStore.activeProfile.destPath.isEmpty ? "Not configured" : configStore.activeProfile.destPath)
                 .font(.caption)
-                .foregroundColor(configStore.destPath.isEmpty ? .red : .secondary)
+                .foregroundColor(configStore.activeProfile.destPath.isEmpty ? .red : .secondary)
                 .lineLimit(1).truncationMode(.middle)
         }
     }

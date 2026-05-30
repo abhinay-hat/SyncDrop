@@ -15,6 +15,7 @@ class MenuBarController {
     private var statusMenuItem: NSMenuItem?
     private var lastSyncMenuItem: NSMenuItem?
     private var syncNowMenuItem: NSMenuItem?
+    private var profileMenuItem: NSMenuItem?
 
     init(configStore: ConfigStore, syncEngine: SyncEngine, volumeMonitor: VolumeMonitor) {
         self.configStore = configStore
@@ -49,7 +50,7 @@ class MenuBarController {
     private func buildMenu() {
         let m = NSMenu()
 
-        let si = NSMenuItem(title: "○ \(configStore.ssdName) — Not connected", action: nil, keyEquivalent: "")
+        let si = NSMenuItem(title: "○ \(configStore.activeProfile.ssdName) — Not connected", action: nil, keyEquivalent: "")
         si.isEnabled = false
         statusMenuItem = si
         m.addItem(si)
@@ -58,6 +59,15 @@ class MenuBarController {
         ls.isEnabled = false
         lastSyncMenuItem = ls
         m.addItem(ls)
+
+        m.addItem(.separator())
+
+        let profileItem = NSMenuItem(title: "Switch Profile", action: nil, keyEquivalent: "")
+        let profileSubmenu = NSMenu()
+        profileItem.submenu = profileSubmenu
+        profileMenuItem = profileItem
+        m.addItem(profileItem)
+        rebuildProfileSubmenu()
 
         m.addItem(.separator())
 
@@ -91,14 +101,48 @@ class MenuBarController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] p in self?.updateForProgress(p) }
             .store(in: &cancellables)
+
+        configStore.$activeProfileId
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.rebuildProfileSubmenu()
+                self.updateForConnection(self.volumeMonitor.ssdConnected)
+            }
+            .store(in: &cancellables)
+
+        configStore.$profiles
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rebuildProfileSubmenu() }
+            .store(in: &cancellables)
     }
 
     private func updateForConnection(_ connected: Bool) {
         statusMenuItem?.title = connected
-            ? "● \(configStore.ssdName) — Connected"
-            : "○ \(configStore.ssdName) — Not connected"
+            ? "● \(configStore.activeProfile.ssdName) — Connected"
+            : "○ \(configStore.activeProfile.ssdName) — Not connected"
         syncNowMenuItem?.isEnabled = connected && syncEngine.progress.isTerminal
         updateLastSyncLabel()
+    }
+
+    private func rebuildProfileSubmenu() {
+        guard let submenu = profileMenuItem?.submenu else { return }
+        submenu.removeAllItems()
+        for profile in configStore.profiles {
+            let item = NSMenuItem(title: profile.name, action: #selector(profileSelected(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = profile.id.uuidString
+            item.state = (profile.id == configStore.activeProfileId) ? .on : .off
+            submenu.addItem(item)
+        }
+    }
+
+    @objc private func profileSelected(_ sender: NSMenuItem) {
+        guard let idString = sender.representedObject as? String,
+              let id = UUID(uuidString: idString) else { return }
+        configStore.activeProfileId = id
+        rebuildProfileSubmenu()
+        updateForConnection(volumeMonitor.ssdConnected)
     }
 
     private func updateForProgress(_ p: SyncProgress) {
