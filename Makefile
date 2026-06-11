@@ -17,6 +17,7 @@ app: build
 	mkdir -p $(CONTENTS)/Resources
 	cp $(BUILD_DIR)/$(APP_NAME) $(CONTENTS)/MacOS/
 	cp Info.plist $(CONTENTS)/
+	cp Resources/AppIcon.icns $(CONTENTS)/Resources/
 	codesign --force --deep --sign - $(APP_BUNDLE)
 	@echo "✓ Built and signed $(APP_BUNDLE)"
 

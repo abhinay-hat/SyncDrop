@@ -1,0 +1,49 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E7DF6"/>
+      <stop offset="1" stop-color="#1FB6C9"/>
+    </linearGradient>
+    <linearGradient id="drive" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6EEF7"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#0A2A4D" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- macOS squircle background -->
+  <path fill="url(#bg)" d="M512 96
+    C 760 96 832 96 904 168
+    C 976 240 976 312 976 512
+    C 976 712 976 784 904 856
+    C 832 928 760 928 512 928
+    C 264 928 192 928 120 856
+    C 48 784 48 712 48 512
+    C 48 312 48 240 120 168
+    C 192 96 264 96 512 96 Z"/>
+
+  <!-- circular sync arrows wrapping the drive -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" opacity="0.95">
+    <!-- top arc, clockwise -->
+    <path d="M 318 392 A 210 210 0 0 1 706 392"/>
+    <!-- bottom arc, clockwise -->
+    <path d="M 706 632 A 210 210 0 0 1 318 632"/>
+  </g>
+  <!-- arrowheads -->
+  <g fill="#FFFFFF">
+    <path d="M 706 392 l -64 -34 l 18 74 Z"/>
+    <path d="M 318 632 l 64 34 l -18 -74 Z"/>
+  </g>
+
+  <!-- SSD / external drive body -->
+  <g filter="url(#softShadow)">
+    <rect x="356" y="446" width="312" height="132" rx="30" fill="url(#drive)"/>
+    <!-- status LED -->
+    <circle cx="408" cy="512" r="20" fill="#1FB6C9"/>
+    <!-- port lines -->
+    <rect x="556" y="492" width="70" height="14" rx="7" fill="#9FB4CC"/>
+    <rect x="556" y="520" width="70" height="14" rx="7" fill="#9FB4CC"/>
+  </g>
+</svg>
