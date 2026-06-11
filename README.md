@@ -4,7 +4,7 @@
 
 # SyncDrop
 
-**Auto-mirror a folder on your Mac to an external SSD with `rsync` — the moment the drive is plugged in.**
+**OneDrive for your own hardware — auto-sync the folders you choose to any drive you plug in, the moment it connects.**
 
 [![Download](https://img.shields.io/badge/Download-SyncDrop.zip-2E7DF6?style=for-the-badge)](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop.zip)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1FB6C9.svg?style=for-the-badge)](LICENSE)
@@ -12,7 +12,9 @@
 
 </div>
 
-SyncDrop is a lightweight macOS **menu-bar** app. No dock icon, no window clutter. It lives in the menu bar, watches for your external SSD, and keeps a backup in sync automatically.
+SyncDrop is a lightweight macOS **menu-bar** app. No dock icon, no window clutter.
+
+Think of it like OneDrive or iCloud Drive — but instead of syncing to a cloud you don't control, it syncs the folders **you** pick to **your own** storage device. Configure your folders once; then whenever you connect the configured drive — an **external SSD, USB pen drive, or hard disk** — SyncDrop automatically mirrors your selected files onto it. Plug in, it syncs, you're backed up. No subscriptions, no cloud, your data stays yours.
 
 ---
 
@@ -109,9 +111,20 @@ Resources/         # app icon (.svg source + .icns)
 
 ---
 
-## Android
+## Roadmap
 
-An Android port (Kotlin + Jetpack Compose) targeting USB-OTG SSD sync is in early development under [`android/`](android/).
+SyncDrop today is macOS → local drive. The goal is **sync the folders you choose to any storage you own, from any device.** Planned:
+
+- **NAS / network drives** — sync to a NAS or any mounted network share, not just USB-attached drives.
+- **Android app** — sync from your phone to a USB-OTG SSD/pen drive (in progress under [`android/`](android/)).
+- **Windows app** — the same plug-in-and-sync experience on Windows.
+- **More targets** — any drive type macOS/Windows can mount (SSD, pen drive, HDD, SD card).
+
+Have a use case or want to help build one of these? Open an issue.
+
+## Android (in progress)
+
+An Android port (Kotlin + Jetpack Compose) targeting USB-OTG drive sync is in early development under [`android/`](android/).
 
 ---
 
