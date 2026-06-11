@@ -24,9 +24,19 @@ class SettingsWindowController: NSWindowController {
             w.styleMask = [.titled, .closable, .miniaturizable]
             w.setContentSize(NSSize(width: 520, height: 360))
             w.center()
+            w.delegate = self
             self.window = w
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+extension SettingsWindowController: NSWindowDelegate {
+    // NSWindowController does not auto-clear `window` on close; without this the
+    // closed window + its NSHostingController leak and reopening just re-fronts
+    // the stale window instead of building a fresh one.
+    func windowWillClose(_ notification: Notification) {
+        window = nil
     }
 }

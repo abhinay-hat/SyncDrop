@@ -33,7 +33,7 @@ public struct SyncRecord: Codable, Identifiable {
     }
 
     public var formattedDuration: String {
-        let d = Int(durationSeconds)
+        let d = max(0, Int(durationSeconds))
         if d < 60 { return "\(d)s" }
         return "\(d / 60)m \(d % 60)s"
     }

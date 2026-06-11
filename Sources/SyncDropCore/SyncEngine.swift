@@ -9,6 +9,7 @@ public final class SyncEngine: ObservableObject {
     private let configStore: ConfigStore
     private var process: Process?
     private var outputPipe: Pipe?
+    private var cancelRequested = false
 
     public init(configStore: ConfigStore) {
         self.configStore = configStore
@@ -62,12 +63,18 @@ public final class SyncEngine: ObservableObject {
             return
         }
 
-        try? FileManager.default.createDirectory(
-            atPath: profile.destPath,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
+        do {
+            try FileManager.default.createDirectory(
+                atPath: profile.destPath,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+        } catch {
+            progress.state = .error("Cannot create destination directory at '\(profile.destPath)': \(error.localizedDescription)")
+            return
+        }
 
+        cancelRequested = false
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         let syncStartDate = Date()
@@ -115,6 +122,7 @@ public final class SyncEngine: ObservableObject {
     }
 
     public func cancel() {
+        cancelRequested = true
         process?.terminate()
         process = nil
         if case .running = progress.state {
@@ -168,10 +176,15 @@ public final class SyncEngine: ObservableObject {
         var updated = progress
         updated.endTime = Date()
 
-        switch p.terminationStatus {
-        case 0:  updated.state = .done
-        case 20: updated.state = .interrupted   // rsync: received SIGINT/SIGTERM
-        default: updated.state = .error("rsync exited with code \(p.terminationStatus)")
+        if cancelRequested {
+            // User-initiated cancel: SIGTERM yields varied exit codes; force interrupted.
+            updated.state = .interrupted
+        } else {
+            switch p.terminationStatus {
+            case 0:      updated.state = .done
+            case 20, 23: updated.state = .interrupted  // 20: SIGINT/SIGTERM, 23: partial transfer
+            default:     updated.state = .error("rsync exited with code \(p.terminationStatus)")
+            }
         }
         progress = updated
 

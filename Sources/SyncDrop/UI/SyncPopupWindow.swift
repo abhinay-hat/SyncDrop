@@ -64,10 +64,13 @@ class SyncPopupWindow: NSObject {
     }
 
     deinit {
+        autoDismissTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 
     private func scheduleAutoDismiss() {
+        // Cancel any in-flight timer so repeated completions don't stack timers.
+        autoDismissTimer?.invalidate()
         autoDismissTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in self?.panel?.orderOut(nil) }
         }

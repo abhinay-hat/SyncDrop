@@ -8,6 +8,7 @@ public final class VolumeMonitor: ObservableObject {
 
     private let configStore: ConfigStore
     private var observers: [NSObjectProtocol] = []
+    private var cancellables: Set<AnyCancellable> = []
 
     public init(configStore: ConfigStore) {
         self.configStore = configStore
@@ -33,15 +34,28 @@ public final class VolumeMonitor: ObservableObject {
         }
 
         observers = [mount, unmount]
+
+        // Re-evaluate connection state when the active profile (and thus the
+        // configured SSD name) changes, otherwise ssdConnected goes stale.
+        configStore.$activeProfileId
+            .sink { [weak self] _ in self?.checkCurrentlyMountedVolumes() }
+            .store(in: &cancellables)
+
         checkCurrentlyMountedVolumes()
     }
 
     public func stop() {
         observers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
         observers = []
+        cancellables.removeAll()
     }
 
     private func checkCurrentlyMountedVolumes() {
+        // Reset first: if no mounted volume matches, state must fall back to
+        // disconnected instead of retaining a previous (stale) match.
+        ssdMountURL = nil
+        ssdConnected = false
+
         let urls = FileManager.default.mountedVolumeURLs(
             includingResourceValuesForKeys: nil,
             options: .skipHiddenVolumes

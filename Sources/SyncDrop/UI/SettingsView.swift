@@ -103,16 +103,25 @@ private struct FoldersTab: View {
                     Button("Choose…") { pickDest() }
                 }
             }
-            Section("Exclude Patterns") {
+            Section {
                 ForEach(configStore.activeProfile.excludes.indices, id: \.self) { index in
                     HStack {
                         TextField("pattern", text: Binding(
-                            get: { configStore.activeProfile.excludes[index] },
-                            set: { var p = configStore.activeProfile; p.excludes[index] = $0; configStore.activeProfile = p }
+                            get: {
+                                let ex = configStore.activeProfile.excludes
+                                return index < ex.count ? ex[index] : ""
+                            },
+                            set: { newValue in
+                                var p = configStore.activeProfile
+                                guard index < p.excludes.count else { return }
+                                p.excludes[index] = newValue
+                                configStore.activeProfile = p
+                            }
                         ))
                         .textFieldStyle(.roundedBorder)
                         Button(role: .destructive) {
                             var p = configStore.activeProfile
+                            guard index < p.excludes.count else { return }
                             p.excludes.remove(at: index)
                             configStore.activeProfile = p
                         } label: {
@@ -128,6 +137,11 @@ private struct FoldersTab: View {
                 } label: {
                     Label("Add Pattern", systemImage: "plus")
                 }
+            } header: {
+                Text("Exclude Patterns")
+            } footer: {
+                Text("Patterns use rsync glob syntax (*, ?, [abc]). Each matches names anywhere in the tree.")
+                    .font(.caption).foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)

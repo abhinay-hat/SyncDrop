@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+import os.log
+
+private let configLog = Logger(subsystem: "com.syncdrop", category: "ConfigStore")
 
 @MainActor
 public final class ConfigStore: ObservableObject {
@@ -21,8 +24,11 @@ public final class ConfigStore: ObservableObject {
     }
     @Published public var syncHistory: [SyncRecord] = [] {
         didSet {
-            if let data = try? JSONEncoder().encode(syncHistory) {
+            do {
+                let data = try JSONEncoder().encode(syncHistory)
                 defaults.set(data, forKey: Keys.syncHistory)
+            } catch {
+                configLog.error("Failed to persist sync history: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -53,9 +59,8 @@ public final class ConfigStore: ObservableObject {
 
         // Load profiles, or migrate from v1, or seed a default.
         let resolvedProfiles: [SyncProfile]
-        if let data = defaults.data(forKey: Keys.profiles),
-           let stored = try? JSONDecoder().decode([SyncProfile].self, from: data),
-           !stored.isEmpty {
+        let storedProfiles = ConfigStore.decodeProfiles(from: defaults)
+        if let stored = storedProfiles, !stored.isEmpty {
             resolvedProfiles = stored
         } else if let migrated = ConfigStore.migrateLegacyProfile(from: defaults) {
             resolvedProfiles = [migrated]
@@ -74,17 +79,20 @@ public final class ConfigStore: ObservableObject {
         }
 
         // Load history.
-        if let data = defaults.data(forKey: Keys.syncHistory),
-           let records = try? JSONDecoder().decode([SyncRecord].self, from: data) {
-            self.syncHistory = records
+        if let data = defaults.data(forKey: Keys.syncHistory) {
+            do {
+                self.syncHistory = try JSONDecoder().decode([SyncRecord].self, from: data)
+            } catch {
+                configLog.error("Failed to decode sync history, resetting: \(error.localizedDescription, privacy: .public)")
+            }
         }
 
-        // `didSet` does not fire during `init`. On a fresh install persist the
-        // seeded profiles + active id so we don't regenerate a new UUID every launch.
-        if defaults.data(forKey: Keys.profiles) == nil {
-            if let data = try? JSONEncoder().encode(self.profiles) {
-                defaults.set(data, forKey: Keys.profiles)
-            }
+        // `didSet` does not fire during `init`. Persist the seeded profiles +
+        // active id when nothing valid was stored (fresh install OR corrupted
+        // data that failed to decode) so we don't regenerate a new UUID every
+        // launch or leave bad data in place.
+        if storedProfiles == nil || storedProfiles?.isEmpty == true {
+            persistProfiles()
             defaults.set(self.activeProfileId.uuidString, forKey: Keys.activeProfileId)
         }
 
@@ -135,8 +143,23 @@ public final class ConfigStore: ObservableObject {
     // MARK: - Persistence & migration
 
     private func persistProfiles() {
-        if let data = try? JSONEncoder().encode(profiles) {
+        do {
+            let data = try JSONEncoder().encode(profiles)
             defaults.set(data, forKey: Keys.profiles)
+        } catch {
+            configLog.error("Failed to persist profiles: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Decodes stored profiles, logging (rather than silently dropping) corrupt data.
+    /// Returns nil when no data is stored or decoding fails.
+    nonisolated private static func decodeProfiles(from defaults: UserDefaults) -> [SyncProfile]? {
+        guard let data = defaults.data(forKey: Keys.profiles) else { return nil }
+        do {
+            return try JSONDecoder().decode([SyncProfile].self, from: data)
+        } catch {
+            configLog.error("Failed to decode profiles, falling back: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 

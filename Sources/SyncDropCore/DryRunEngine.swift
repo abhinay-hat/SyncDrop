@@ -55,31 +55,47 @@ public struct DryRunEngine {
     }
 
     private func runRsync(_ arguments: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-            process.arguments = arguments
+        // Accumulate output incrementally so the pipe buffer never fills (large
+        // itemize output would otherwise deadlock readDataToEndOfFile in the
+        // termination handler). Box allows safe mutation from the read handler.
+        final class Box { var value = "" }
+        let process = Process()
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+                process.arguments = arguments
 
-            process.terminationHandler = { proc in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                // rsync exit 0 = success; 24 = files vanished (benign for preview).
-                if proc.terminationStatus == 0 || proc.terminationStatus == 24 {
-                    continuation.resume(returning: text)
-                } else {
-                    continuation.resume(throwing: DryRunError.rsyncFailed(proc.terminationStatus))
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
+
+                let output = Box()
+                pipe.fileHandleForReading.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    guard !data.isEmpty else { return }
+                    output.value += String(data: data, encoding: .utf8) ?? ""
+                }
+
+                process.terminationHandler = { proc in
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                    let text = output.value
+                    // rsync exit 0 = success; 24 = files vanished (benign for preview).
+                    if proc.terminationStatus == 0 || proc.terminationStatus == 24 {
+                        continuation.resume(returning: text)
+                    } else {
+                        continuation.resume(throwing: DryRunError.rsyncFailed(proc.terminationStatus))
+                    }
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: DryRunError.launchFailed(error.localizedDescription))
                 }
             }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: DryRunError.launchFailed(error.localizedDescription))
-            }
+        } onCancel: {
+            process.terminate()
         }
     }
 
