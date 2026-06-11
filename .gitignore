@@ -1,4 +1,27 @@
+# Swift / SwiftPM
 .build/
 *.app/
 *.o
 *.d
+*.swiftpm
+DerivedData/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+
+# Generated icon intermediates
+*.iconset/
