@@ -24,25 +24,25 @@
     C 48 312 48 240 120 168
     C 192 96 264 96 512 96 Z"/>
 
-  <!-- circular sync arrows wrapping the drive -->
-  <g fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" opacity="0.95">
-    <!-- top arc, clockwise -->
-    <path d="M 318 392 A 210 210 0 0 1 706 392"/>
-    <!-- bottom arc, clockwise -->
-    <path d="M 706 632 A 210 210 0 0 1 318 632"/>
-  </g>
-  <!-- arrowheads -->
-  <g fill="#FFFFFF">
-    <path d="M 706 392 l -64 -34 l 18 74 Z"/>
-    <path d="M 318 632 l 64 34 l -18 -74 Z"/>
+  <!-- Circular sync arrows, centered on the drive (512,512), R=200.
+       Two 140-degree arcs in rotational (180) symmetry, clockwise flow. -->
+  <g fill="#FFFFFF" stroke="none">
+    <!-- Top arc: left(340,410) -> right(684,410) over the top, clockwise -->
+    <path fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round"
+          d="M 340 410 A 200 200 0 0 1 684 410"/>
+    <!-- Bottom arc: right(684,614) -> left(340,614) under the bottom, clockwise -->
+    <path fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round"
+          d="M 684 614 A 200 200 0 0 1 340 614"/>
+    <!-- Arrowhead at top-right end, pointing down (clockwise tangent) -->
+    <path d="M 648 404 L 720 404 L 684 476 Z"/>
+    <!-- Arrowhead at bottom-left end, pointing up (clockwise tangent) -->
+    <path d="M 376 620 L 304 620 L 340 548 Z"/>
   </g>
 
   <!-- SSD / external drive body -->
   <g filter="url(#softShadow)">
     <rect x="356" y="446" width="312" height="132" rx="30" fill="url(#drive)"/>
-    <!-- status LED -->
     <circle cx="408" cy="512" r="20" fill="#1FB6C9"/>
-    <!-- port lines -->
     <rect x="556" y="492" width="70" height="14" rx="7" fill="#9FB4CC"/>
     <rect x="556" y="520" width="70" height="14" rx="7" fill="#9FB4CC"/>
   </g>

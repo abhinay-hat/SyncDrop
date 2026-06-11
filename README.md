@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Resources/AppIcon.svg" width="128" height="128" alt="SyncDrop icon">
+<img src="Resources/AppIcon.png" width="128" height="128" alt="SyncDrop icon">
 
 # SyncDrop
 
