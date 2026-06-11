@@ -28,3 +28,6 @@ android/captures/
 
 # Release artifacts
 *.zip
+
+# Internal-only docs (never publish)
+docs/internal/
