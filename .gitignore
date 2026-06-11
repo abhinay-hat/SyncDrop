@@ -25,3 +25,6 @@ android/captures/
 
 # Generated icon intermediates
 *.iconset/
+
+# Release artifacts
+*.zip
