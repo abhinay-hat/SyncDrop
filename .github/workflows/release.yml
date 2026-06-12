@@ -1,0 +1,98 @@
+name: Release
+
+# Cut a release by pushing a version tag, e.g.:
+#   git tag v1.0.1 && git push origin v1.0.1
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      # Notarized path requires these repo secrets. If APP_IDENTITY is unset we
+      # fall back to a clean ad-hoc build (still uploaded, just not notarized).
+      - name: Detect signing capability
+        id: sign
+        env:
+          APP_IDENTITY: ${{ secrets.APP_IDENTITY }}
+        run: |
+          if [ -n "$APP_IDENTITY" ]; then
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No APP_IDENTITY secret set — building an ad-hoc (non-notarized) release."
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.sign.outputs.notarize == 'true'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
+          KPW="$(openssl rand -base64 24)"
+          security create-keychain -p "$KPW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KPW" "$KEYCHAIN"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KPW" "$KEYCHAIN" >/dev/null
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build, sign & notarize
+        if: steps.sign.outputs.notarize == 'true'
+        env:
+          APP_IDENTITY: ${{ secrets.APP_IDENTITY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: make notarize
+
+      - name: Build ad-hoc (no secrets)
+        if: steps.sign.outputs.notarize == 'false'
+        run: make zip
+
+      - name: Verify artifact
+        run: |
+          test -f SyncDrop.zip
+          unzip -l SyncDrop.zip | grep -q "SyncDrop.app" && echo "bundle present"
+
+      - name: Create / update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          NOTES="Release $TAG. See the README for install steps."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" SyncDrop.zip --clobber
+          else
+            gh release create "$TAG" SyncDrop.zip \
+              --title "SyncDrop $TAG" \
+              --generate-notes
+          fi

@@ -179,6 +179,27 @@ make notarize   # builds, signs with Developer ID, notarizes, staples, zips
 
 See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
+#### Automated releases (GitHub Actions)
+
+Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which builds, packages, and attaches `SyncDrop.zip` to a GitHub Release:
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+If these repo **secrets** are set, the workflow signs with Developer ID and
+notarizes; otherwise it falls back to a clean ad-hoc build (still uploaded):
+
+| Secret | What |
+|--------|------|
+| `APP_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` |
+| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID cert exported as `.p12`, base64-encoded |
+| `MACOS_CERTIFICATE_PASSWORD` | password for that `.p12` |
+| `APP_STORE_CONNECT_KEY_ID` | App Store Connect API key id |
+| `APP_STORE_CONNECT_ISSUER_ID` | issuer id |
+| `APP_STORE_CONNECT_API_KEY_P8` | contents of the `AuthKey_XXXX.p8` |
+
 ## License
 
 [MIT](LICENSE) © 2026 Abhinay Reddy
