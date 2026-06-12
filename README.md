@@ -10,11 +10,23 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-1FB6C9.svg?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/macOS-13%2B-555.svg?style=for-the-badge)](#requirements)
 
+<br>
+
+![SyncDrop](docs/screenshots/hero.png)
+
 </div>
 
 SyncDrop is a lightweight macOS **menu-bar** app. No dock icon, no window clutter.
 
 Think of it like OneDrive or iCloud Drive — but instead of syncing to a cloud you don't control, it syncs the folders **you** pick to **your own** storage device. Configure your folders once; then whenever you connect the configured drive — an **external SSD, USB pen drive, or hard disk** — SyncDrop automatically mirrors your selected files onto it. Plug in, it syncs, you're backed up. No subscriptions, no cloud, your data stays yours.
+
+<div align="center">
+
+![SyncDrop demo](docs/screenshots/demo.gif)
+
+*Plug in your drive → SyncDrop detects it → mirrors your folders → done.*
+
+</div>
 
 ---
 
@@ -63,6 +75,12 @@ Open the menu-bar icon → **Settings**, then in the **Folders** tab:
 1. **Source (Mac)** — choose the folder you want backed up (e.g. `~/Desktop/Projects`).
 2. **SSD Volume Name** — type the exact name of your SSD as it appears in Finder (e.g. `Extreme Pro`).
 3. **Destination (on SSD)** — plug in the SSD, then choose the target folder on it.
+
+<div align="center">
+
+![SyncDrop settings](docs/screenshots/settings.png)
+
+</div>
 
 In the **Behavior** tab, turn on **Auto-sync when SSD connected** if you want it to run automatically. That's it — plug in the drive and SyncDrop syncs.
 
