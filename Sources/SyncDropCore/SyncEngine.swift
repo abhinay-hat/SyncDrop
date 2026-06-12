@@ -94,8 +94,9 @@ public final class SyncEngine: ObservableObject {
         progress = initial
 
         // Buffer partial lines — rsync progress (to-check=N/T) can split across reads.
-        // Use a Box to allow safe mutation from the readabilityHandler closure.
-        final class Box { var value = "" }
+        // Box allows mutation from the readabilityHandler; @unchecked Sendable
+        // because FileHandle delivers reads serially on its own queue.
+        final class Box: @unchecked Sendable { var value = "" }
         let lineBuffer = Box()
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
@@ -110,7 +111,10 @@ public final class SyncEngine: ObservableObject {
         }
 
         p.terminationHandler = { [weak self] proc in
-            Task { @MainActor [weak self] in self?.handleTermination(proc) }
+            // Extract the Sendable exit status; Process itself is non-Sendable
+            // and must not cross the hop to the main actor.
+            let status = proc.terminationStatus
+            Task { @MainActor [weak self] in self?.handleTermination(status: status) }
         }
 
         process = p
@@ -170,7 +174,7 @@ public final class SyncEngine: ObservableObject {
         }
     }
 
-    private func handleTermination(_ p: Process) {
+    private func handleTermination(status: Int32) {
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil
         var updated = progress
@@ -180,10 +184,10 @@ public final class SyncEngine: ObservableObject {
             // User-initiated cancel: SIGTERM yields varied exit codes; force interrupted.
             updated.state = .interrupted
         } else {
-            switch p.terminationStatus {
+            switch status {
             case 0:      updated.state = .done
             case 20, 23: updated.state = .interrupted  // 20: SIGINT/SIGTERM, 23: partial transfer
-            default:     updated.state = .error("rsync exited with code \(p.terminationStatus)")
+            default:     updated.state = .error("rsync exited with code \(status)")
             }
         }
         progress = updated

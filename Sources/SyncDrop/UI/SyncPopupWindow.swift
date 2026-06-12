@@ -17,7 +17,7 @@ class SyncPopupWindow: NSObject {
         NotificationCenter.default.addObserver(
             forName: .syncDidComplete, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.scheduleAutoDismiss() }
+            MainActor.assumeIsolated { self?.scheduleAutoDismiss() }
         }
     }
 
@@ -72,7 +72,7 @@ class SyncPopupWindow: NSObject {
         // Cancel any in-flight timer so repeated completions don't stack timers.
         autoDismissTimer?.invalidate()
         autoDismissTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.panel?.orderOut(nil) }
+            MainActor.assumeIsolated { self?.panel?.orderOut(nil) }
         }
     }
 }

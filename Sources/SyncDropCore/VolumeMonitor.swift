@@ -17,20 +17,25 @@ public final class VolumeMonitor: ObservableObject {
     public func start() {
         let center = NSWorkspace.shared.notificationCenter
 
+        // queue: .main guarantees these run on the main thread, so we extract the
+        // Sendable URL and hop via assumeIsolated rather than capturing the
+        // non-Sendable Notification across a Task (which newer Swift rejects).
         let mount = center.addObserver(
             forName: NSWorkspace.didMountNotification,
             object: nil,
             queue: .main
-        ) { [weak self] n in
-            Task { @MainActor in self?.handleMount(n) }
+        ) { [weak self] note in
+            let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+            MainActor.assumeIsolated { self?.handleMount(url) }
         }
 
         let unmount = center.addObserver(
             forName: NSWorkspace.didUnmountNotification,
             object: nil,
             queue: .main
-        ) { [weak self] n in
-            Task { @MainActor in self?.handleUnmount(n) }
+        ) { [weak self] note in
+            let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+            MainActor.assumeIsolated { self?.handleUnmount(url) }
         }
 
         observers = [mount, unmount]
@@ -67,19 +72,15 @@ public final class VolumeMonitor: ObservableObject {
         }
     }
 
-    private func handleMount(_ notification: Notification) {
-        guard let url = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
-        if url.lastPathComponent == configStore.activeProfile.ssdName {
-            ssdMountURL = url
-            ssdConnected = true
-        }
+    private func handleMount(_ url: URL?) {
+        guard let url, url.lastPathComponent == configStore.activeProfile.ssdName else { return }
+        ssdMountURL = url
+        ssdConnected = true
     }
 
-    private func handleUnmount(_ notification: Notification) {
-        guard let url = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
-        if url.lastPathComponent == configStore.activeProfile.ssdName {
-            ssdMountURL = nil
-            ssdConnected = false
-        }
+    private func handleUnmount(_ url: URL?) {
+        guard let url, url.lastPathComponent == configStore.activeProfile.ssdName else { return }
+        ssdMountURL = nil
+        ssdConnected = false
     }
 }

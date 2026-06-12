@@ -38,7 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             forName: .syncDidComplete, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.handleSyncCompleted() }
+            MainActor.assumeIsolated { self?.handleSyncCompleted() }
         }
     }
 

@@ -57,12 +57,16 @@ public struct DryRunEngine {
     private func runRsync(_ arguments: [String]) async throws -> String {
         // Accumulate output incrementally so the pipe buffer never fills (large
         // itemize output would otherwise deadlock readDataToEndOfFile in the
-        // termination handler). Box allows safe mutation from the read handler.
-        final class Box { var value = "" }
-        let process = Process()
+        // termination handler). Box allows safe mutation from the read handler;
+        // ProcBox is a Sendable holder so the non-Sendable Process can be reached
+        // from the @Sendable onCancel closure.
+        final class Box: @unchecked Sendable { var value = "" }
+        final class ProcBox: @unchecked Sendable { let process = Process() }
+        let box = ProcBox()
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                let process = box.process
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
                 process.arguments = arguments
 
@@ -80,11 +84,12 @@ public struct DryRunEngine {
                 process.terminationHandler = { proc in
                     pipe.fileHandleForReading.readabilityHandler = nil
                     let text = output.value
+                    let status = proc.terminationStatus
                     // rsync exit 0 = success; 24 = files vanished (benign for preview).
-                    if proc.terminationStatus == 0 || proc.terminationStatus == 24 {
+                    if status == 0 || status == 24 {
                         continuation.resume(returning: text)
                     } else {
-                        continuation.resume(throwing: DryRunError.rsyncFailed(proc.terminationStatus))
+                        continuation.resume(throwing: DryRunError.rsyncFailed(status))
                     }
                 }
 
@@ -95,7 +100,7 @@ public struct DryRunEngine {
                 }
             }
         } onCancel: {
-            process.terminate()
+            box.process.terminate()
         }
     }
 
