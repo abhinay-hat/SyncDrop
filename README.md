@@ -35,16 +35,25 @@ Think of it like OneDrive or iCloud Drive — but instead of syncing to a cloud 
 ### Option A — Download the app (recommended)
 
 1. **[Download `SyncDrop.zip`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop.zip)** from the latest release.
-2. **Unzip** it (double-click).
-3. **Drag `SyncDrop.app`** into your `/Applications` folder.
-4. **First launch:** right-click `SyncDrop.app` → **Open** → **Open** in the dialog.
-   > The build is *ad-hoc signed* (not notarized), so macOS Gatekeeper asks for confirmation the first time. You only do this once.
+2. **Unzip** it (double-click) and **drag `SyncDrop.app`** into your `/Applications` folder.
+3. **First launch.** Double-click it. macOS shows *"Apple could not verify SyncDrop is free of malware."* That's expected — the app isn't notarized yet (see [below](#why-the-warning)). To open it:
 
-   If macOS still blocks it, remove the quarantine flag from Terminal:
+   **On macOS 15 (Sequoia) and later:**
+   1. Click **Done** on the dialog.
+   2. Open  → **System Settings → Privacy & Security**.
+   3. Scroll down to the message *"SyncDrop was blocked…"* and click **Open Anyway**.
+   4. Authenticate, then click **Open**. Done — you only do this once.
+
+   **On macOS 13–14 (Ventura/Sonoma):** right-click `SyncDrop.app` → **Open** → **Open**.
+
+   **Or, from Terminal (any version):** one command, then just double-click normally:
    ```bash
    xattr -dr com.apple.quarantine /Applications/SyncDrop.app
    ```
-5. The **SyncDrop icon appears in your menu bar**. Click it → **Settings** to set up.
+4. The **SyncDrop icon appears in your menu bar**. Click it → **Settings** to set up.
+
+<a name="why-the-warning"></a>
+> **Why the warning?** SyncDrop is open-source and code-signed, but not yet *notarized* by Apple — notarization requires a paid Apple Developer account ($99/yr). The build is safe and fully auditable here; you can also [build it yourself](#option-b--build-from-source) in one command. Notarization is on the [roadmap](#roadmap).
 
 ### Option B — Build from source
 
@@ -149,6 +158,26 @@ An Android port (Kotlin + Jetpack Compose) targeting USB-OTG drive sync is in ea
 ## Contributing
 
 Issues and pull requests welcome. Build with `make app`, run `swift test` before submitting.
+
+### Releasing (maintainers)
+
+```bash
+make app        # ad-hoc signed bundle, hardened runtime (notarization-ready)
+make zip        # clean, AppleDouble-free SyncDrop.zip for distribution
+```
+
+To ship a **notarized** build (no Gatekeeper warning for users), you need a paid
+Apple Developer account, then:
+
+```bash
+export APP_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export APP_STORE_CONNECT_KEY_ID=...        # App Store Connect API key id
+export APP_STORE_CONNECT_ISSUER_ID=...     # issuer id
+export APP_STORE_CONNECT_API_KEY_P8="$(cat AuthKey_XXXX.p8)"
+make notarize   # builds, signs with Developer ID, notarizes, staples, zips
+```
+
+See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
 ## License
 
