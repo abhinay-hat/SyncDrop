@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SyncDrop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="popup">
+  <section id="progress-view" class="card">
+    <header>
+      <h1 id="heading">SyncDrop</h1>
+      <p id="sub" class="help"></p>
+    </header>
+    <div class="meter">
+      <progress id="bar" max="100" value="0"></progress>
+      <span id="percent">0%</span>
+    </div>
+    <dl class="stats">
+      <div><dt>Files</dt><dd id="files">0 / 0</dd></div>
+      <div><dt>Bytes</dt><dd id="bytes">0 bytes</dd></div>
+      <div><dt>Speed</dt><dd id="speed">—</dd></div>
+      <div><dt>ETA</dt><dd id="eta">—</dd></div>
+    </dl>
+    <p id="current" class="current"></p>
+    <p id="message" class="message"></p>
+    <p id="summary" class="summary" hidden></p>
+    <div class="actions">
+      <button id="dismiss" type="button" hidden>Close</button>
+      <button id="retry" type="button" hidden>Retry</button>
+      <button id="cancel" type="button">Cancel</button>
+    </div>
+  </section>
+  <section id="dry-view" class="card" hidden>
+    <h1>Dry run</h1>
+    <div id="groups"></div>
+    <p id="dry-error" class="message"></p>
+    <div class="actions">
+      <button id="dry-cancel" type="button">Cancel</button>
+      <button id="dry-sync" type="button" class="primary">Confirm sync</button>
+    </div>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

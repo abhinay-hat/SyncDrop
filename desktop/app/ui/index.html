@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SyncDrop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h6.2L13 6.2V13.5H3z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M9 2.8V6.2H12.4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+        <span>SyncDrop</span>
+      </div>
+      <div id="profile-list" class="profile-list" role="listbox" aria-label="Profiles"></div>
+      <form id="add-form" class="add-form">
+        <label class="sr" for="new-name">New profile name</label>
+        <input id="new-name" type="text" placeholder="Profile name" autocomplete="off">
+        <button id="add-profile" type="submit">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          Add profile
+        </button>
+      </form>
+    </aside>
+    <div class="workspace">
+      <header class="status-bar">
+        <div>
+          <h1 id="profile-heading">Profile</h1>
+          <p class="meta">
+            <span id="drive-state">Checking drive…</span>
+            <span class="dot-sep" aria-hidden="true"></span>
+            <span id="last-sync">No sync yet</span>
+          </p>
+        </div>
+        <div class="actions">
+          <button id="dry-run" type="button">Dry run</button>
+          <button id="sync-now" type="button" class="primary">Sync now</button>
+          <button id="eject" type="button">Eject</button>
+        </div>
+      </header>
+      <nav class="tabs" role="tablist" aria-label="Profile settings">
+        <button type="button" role="tab" data-tab="general" aria-selected="true">General</button>
+        <button type="button" role="tab" data-tab="behavior" aria-selected="false">Behavior</button>
+        <button type="button" role="tab" data-tab="excludes" aria-selected="false">Excludes</button>
+        <button type="button" role="tab" data-tab="network" aria-selected="false">Network</button>
+        <button type="button" role="tab" data-tab="cloud" aria-selected="false">Cloud</button>
+        <button type="button" role="tab" data-tab="history" aria-selected="false">History</button>
+        <button type="button" role="tab" data-tab="logs" aria-selected="false">Logs</button>
+        <button type="button" role="tab" data-tab="about" aria-selected="false">About</button>
+      </nav>
+      <main>
+        <p id="loading" class="empty">Loading settings…</p>
+
+        <section id="general" class="panel active" role="tabpanel">
+          <label for="profile-name">Name</label>
+          <input id="profile-name" type="text" autocomplete="off">
+          <p class="field-error" data-for="name"></p>
+
+          <label for="source">Source</label>
+          <div class="row">
+            <input id="source" type="text" spellcheck="false">
+            <button id="pick-source" type="button">Choose</button>
+          </div>
+          <p class="help">Folder on this computer.</p>
+          <p class="field-error" data-for="source"></p>
+
+          <label for="dest">Destination</label>
+          <div class="row">
+            <input id="dest" type="text" spellcheck="false">
+            <button id="pick-dest" type="button">Choose</button>
+            <button id="pick-gdrive" type="button">Drive folder</button>
+            <button id="use-cloud" type="button">Drive API</button>
+          </div>
+          <p class="help">Folder on the drive, or a Google Drive target.</p>
+          <p class="field-error" data-for="dest"></p>
+
+          <label for="ssd">Drive name</label>
+          <input id="ssd" type="text" placeholder="Extreme Pro" autocomplete="off">
+          <p class="help">Volume label SyncDrop watches for. Not required for cloud.</p>
+          <p class="field-error" data-for="ssd"></p>
+
+          <div class="actions">
+            <button id="save-general" type="button" class="primary">Save</button>
+            <button id="delete-profile" type="button" class="danger">Delete profile</button>
+          </div>
+        </section>
+
+        <section id="behavior" class="panel" role="tabpanel">
+          <label class="switch"><input id="mirror" type="checkbox"><span>Mirror</span></label>
+          <p class="help">Delete destination files that are gone from the source.</p>
+          <label class="switch"><input id="auto-sync" type="checkbox"><span>Auto-sync</span></label>
+          <p class="help">Start a sync when the drive connects.</p>
+          <label class="switch"><input id="auto-eject" type="checkbox"><span>Auto-eject</span></label>
+          <p class="help">Eject the drive after a successful sync.</p>
+          <label class="switch"><input id="keep-versions" type="checkbox"><span>Keep versions</span></label>
+          <p class="help">Move replaced files into .syncdrop-versions.</p>
+          <label class="switch"><input id="notify" type="checkbox"><span>Notify on complete</span></label>
+          <p class="help">System notification when a sync finishes.</p>
+          <label class="switch"><input id="launch" type="checkbox"><span>Launch at login</span></label>
+          <p class="help">Start SyncDrop when you sign in.</p>
+          <div class="actions">
+            <button id="save-behavior" type="button" class="primary">Save</button>
+          </div>
+        </section>
+
+        <section id="excludes" class="panel" role="tabpanel">
+          <p class="help">One glob per chip. A name matches anywhere in the tree.</p>
+          <div id="chips" class="chips"></div>
+          <div class="row">
+            <input id="exclude-input" type="text" placeholder="*.tmp" spellcheck="false" autocomplete="off">
+            <button id="add-exclude" type="button">Add</button>
+          </div>
+          <p class="field-error" data-for="excludes"></p>
+          <div class="actions">
+            <button id="save-excludes" type="button" class="primary">Save</button>
+          </div>
+        </section>
+
+        <section id="network" class="panel" role="tabpanel">
+          <p class="help">SMB share. The password stays in the system keychain.</p>
+          <label for="nas-host">Host</label>
+          <input id="nas-host" type="text" placeholder="nas.local" spellcheck="false" autocomplete="off">
+          <p class="field-error" data-for="nasHost"></p>
+          <label for="nas-share">Share</label>
+          <input id="nas-share" type="text" spellcheck="false" autocomplete="off">
+          <p class="field-error" data-for="nasShare"></p>
+          <label for="nas-user">Username</label>
+          <input id="nas-user" type="text" placeholder="Blank for guest" autocomplete="off">
+          <label class="switch"><input id="auto-mount" type="checkbox"><span>Auto-mount</span></label>
+          <p class="help">Mount this share when it is missing. Retries about once a minute.</p>
+          <label for="nas-password">Password</label>
+          <input id="nas-password" type="password" placeholder="Leave blank to keep the saved password" autocomplete="new-password">
+          <div class="actions">
+            <button id="clear-password" type="button" class="danger">Remove password</button>
+            <button id="set-password" type="button">Save password</button>
+            <button id="save-network" type="button" class="primary">Save</button>
+          </div>
+        </section>
+
+        <section id="cloud" class="panel" role="tabpanel">
+          <p id="google-state" class="help">Not signed in</p>
+          <label for="client-id">Client ID</label>
+          <input id="client-id" type="text" placeholder="….apps.googleusercontent.com" spellcheck="false" autocomplete="off">
+          <label for="client-secret">Client secret</label>
+          <input id="client-secret" type="password" placeholder="Stored in the keychain" autocomplete="new-password">
+          <p id="secret-state" class="help"></p>
+          <label for="gfolder">Drive folder</label>
+          <input id="gfolder" type="text" placeholder="SyncDrop" autocomplete="off">
+          <div class="actions">
+            <button id="save-google" type="button">Save credentials</button>
+            <button id="use-folder" type="button">Use for this profile</button>
+            <button id="sign-in" type="button" class="primary">Sign in</button>
+            <button id="sign-out" type="button">Sign out</button>
+            <button id="open-console" type="button">Cloud console</button>
+          </div>
+          <p class="help">Desktop OAuth client with the Drive API enabled.</p>
+        </section>
+
+        <section id="history" class="panel" role="tabpanel">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Profile</th>
+                <th>Files</th>
+                <th>Size</th>
+                <th>Duration</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+          <p id="history-empty" class="empty" hidden>No syncs recorded.</p>
+          <div class="actions">
+            <button id="clear-history" type="button" class="danger">Clear history</button>
+          </div>
+        </section>
+
+        <section id="logs" class="panel" role="tabpanel">
+          <div class="row log-tools">
+            <label class="inline" for="log-level">Level
+              <select id="log-level">
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+              </select>
+            </label>
+            <input id="log-search" type="search" placeholder="Search logs" autocomplete="off">
+            <button id="open-logs" type="button">Open logs folder</button>
+          </div>
+          <div id="log-view" class="log-view" aria-live="polite"></div>
+          <p id="log-empty" class="empty">No log lines yet.</p>
+        </section>
+
+        <section id="about" class="panel" role="tabpanel">
+          <h2>SyncDrop 0.1.0</h2>
+          <p class="help">Copies a folder to a drive, NAS share, or Google Drive when that target is available.</p>
+          <p class="help">Profiles live in the app config. NAS passwords and Google tokens stay in the system keychain.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>

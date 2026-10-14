@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SyncDrop</string>
+    <string name="usb_connected">SSD connected</string>
+    <string name="usb_not_connected">No SSD connected</string>
+    <string name="add_profile">Add Profile</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="add_folder">Add Folder</string>
+    <string name="auto_sync">Auto-sync</string>
+    <string name="mirror_mode">Mirror mode</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="clear_history">Clear History</string>
+    <string name="history">History</string>
+    <string name="profile_name">Profile name</string>
+    <string name="dest_path">Destination path on SSD</string>
+    <string name="exclude_patterns">Exclude patterns</string>
+    <string name="sync_channel_name">Sync progress</string>
+    <string name="sync_channel_desc">Shows progress while syncing to your SSD</string>
+    <string name="storage_note">Note: writing to a removable USB volume requires that Android has mounted it at a readable path. If the destination is not writable, grant storage access and re-plug the SSD.</string>
+</resources>

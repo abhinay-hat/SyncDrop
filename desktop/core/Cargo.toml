@@ -1,0 +1,30 @@
+[package]
+name = "syncdrop-core"
+version = "0.1.0"
+edition = "2021"
+description = "SyncDrop core: profiles, config, and sync progress"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+dirs = "6"
+log = "0.4"
+# Phase 2–4 deps, declared now so those phases don't edit this file.
+globset = "0.4"
+walkdir = "2"
+filetime = "0.2"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+sysinfo = "0.35"
+keyring = "3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+# One-time macOS UserDefaults import (`defaults export` XML). Used on every OS so the conversion test runs in CI.
+plist = "1"
+
+[dev-dependencies]
+tempfile = "3"

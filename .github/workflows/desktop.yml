@@ -1,0 +1,41 @@
+name: Desktop
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  desktop:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test
+        working-directory: desktop
+        run: cargo test
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build
+        working-directory: desktop/app
+        run: cargo tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: syncdrop-${{ matrix.os }}
+          path: desktop/target/release/bundle/
+          if-no-files-found: error

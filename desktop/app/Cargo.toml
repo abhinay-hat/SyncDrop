@@ -1,0 +1,30 @@
+[package]
+name = "syncdrop"
+version = "0.1.0"
+edition = "2021"
+description = "SyncDrop menu-bar app"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+syncdrop-core = { path = "../core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+uuid = { version = "1", features = ["serde"] }
+log = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+tracing-log = "0.2"
+dirs = "6"
+
+[dev-dependencies]
+tempfile = "3"
