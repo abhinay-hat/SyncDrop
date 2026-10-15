@@ -1,28 +1,82 @@
 const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args || {});
 
 let state = null;
+let selectedId = null;
 let excludes = [];
 let formDirty = false;
 let logTimer = 0;
 let toastTimer = 0;
+let dialogWait = null;
+
+const apple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 
 const FIELD_TAB = {
-  source: "general",
-  dest: "general",
-  ssd: "general",
-  nasHost: "network",
-  nasShare: "network",
-  excludes: "excludes",
+  source: "sync",
+  dest: "sync",
+  ssd: "sync",
+  nasHost: "sync",
+  nasShare: "sync",
+  excludes: "rules",
 };
 
-function active() {
+const GLYPH = {
+  ok: '<circle cx="8" cy="8" r="5.2"/><path d="M5.4 8.2 7.1 9.9 10.7 6.2"/>',
+  off: '<circle cx="8" cy="8" r="5.2"/>',
+  sync: '<path d="M3.2 8a4.8 4.8 0 0 1 8.2-3.4M12.8 8a4.8 4.8 0 0 1-8.2 3.4"/>',
+  fail: '<circle cx="8" cy="8" r="5.2"/><path d="M8 5.1v3.3M8 11.1h.01"/>',
+};
+
+function glyph(kind) {
+  const holder = document.createElement("span");
+  holder.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${GLYPH[kind] || GLYPH.off}</svg>`;
+  return holder.firstChild;
+}
+
+function selected() {
   if (!state) return null;
-  return state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0] || null;
+  return state.profiles.find((profile) => profile.id === selectedId) || state.profiles[0] || null;
+}
+
+function liveOf(id) {
+  return (state.profilesLive || []).find((row) => row.id === id) || null;
+}
+
+function lastOf(profile) {
+  return (state.history || []).find((row) => row.profileId && row.profileId === profile.id) || null;
+}
+
+function currentTarget() {
+  return document.querySelector('input[name="target"]:checked')?.value || "drive";
+}
+
+function targetOf(profile) {
+  if (!profile) return "drive";
+  const dest = profile.destPath || "";
+  if (profile.ssdName === "Google Drive (Cloud)" || dest.startsWith("gdrive://") || /Google Drive \(Cloud\)|Google Drive Cloud:/i.test(dest)) {
+    return "google";
+  }
+  if ((profile.nasHost || "").trim()) return "nas";
+  return "drive";
+}
+
+function targetTitle(profile) {
+  const target = targetOf(profile);
+  if (target === "google") return "Google Drive";
+  if (target === "nas") return profile.nasShare || profile.ssdName || profile.name || "Network share";
+  return profile.ssdName || profile.name || "External drive";
 }
 
 function emptyToNull(value) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function checked(id) {
+  return document.getElementById(id).getAttribute("aria-checked") === "true";
+}
+
+function setChecked(id, value) {
+  document.getElementById(id).setAttribute("aria-checked", value ? "true" : "false");
 }
 
 function toast(message, bad) {
@@ -31,7 +85,7 @@ function toast(message, bad) {
   el.classList.toggle("bad", !!bad);
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 2800);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
 }
 
 function clearErrors() {
@@ -60,30 +114,121 @@ function showIssues(err) {
 function relative(unix) {
   if (!unix) return "No sync yet";
   const delta = Math.max(0, Date.now() / 1000 - unix);
+  const fmt = (n, unit) => `${n.toLocaleString()} ${unit}${n === 1 ? "" : "s"} ago`;
   if (delta < 45) return "Last sync just now";
-  if (delta < 3600) return `Last sync ${Math.floor(delta / 60)} min ago`;
-  if (delta < 86400) return `Last sync ${Math.floor(delta / 3600)} hr ago`;
-  return `Last sync ${Math.floor(delta / 86400)} d ago`;
+  if (delta < 3600) return `Last sync ${fmt(Math.floor(delta / 60), "minute")}`;
+  if (delta < 86400) return `Last sync ${fmt(Math.floor(delta / 3600), "hour")}`;
+  return `Last sync ${fmt(Math.floor(delta / 86400), "day")}`;
 }
 
-function statusOf(profile) {
-  const on = profile.id === state.activeProfileId;
-  if (!on) return "idle";
-  if (state.syncing || (state.progress && state.progress.state === "running")) return "syncing";
-  if (state.progress && state.progress.state === "error") return "error";
-  if (state.connected) return "connected";
-  return "idle";
+function bytes(n) {
+  const value = Math.max(0, Number(n) || 0);
+  const units = ["bytes", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1000 && unit < units.length - 1) {
+    size /= 1000;
+    unit += 1;
+  }
+  const shown = unit === 0 ? Math.round(size) : (size < 10 ? Number(size.toFixed(1)) : Math.round(size));
+  return `${shown.toLocaleString()} ${units[unit]}`;
+}
+
+function eta(seconds) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.round(seconds);
+  if (s < 60) return `${s.toLocaleString()}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m.toLocaleString()}m ${(s % 60).toLocaleString()}s`;
+  return `${Math.floor(m / 60).toLocaleString()}h ${(m % 60).toLocaleString()}m`;
+}
+
+function statusText(profile) {
+  const running = state.syncing && state.syncingProfileId === profile.id;
+  if (running && state.previewing) return "Preparing preview";
+  if (running) return "Syncing";
+  const live = liveOf(profile.id);
+  return live && live.connected ? "Connected" : "Not connected";
+}
+
+function statusKind(text) {
+  if (text === "Syncing" || text === "Preparing preview") return "sync";
+  if (text === "Connected") return "ok";
+  return "off";
+}
+
+function markDirty() {
+  formDirty = true;
+  showSavebar();
+  if (state) paintHeader();
+}
+
+function showSavebar() {
+  const prefs = !document.getElementById("prefs-main").hidden;
+  document.getElementById("savebar").hidden = !formDirty || prefs;
+}
+
+function applyTarget(target) {
+  document.querySelectorAll("[data-target]").forEach((el) => {
+    el.hidden = !el.dataset.target.split(/\s+/).includes(target);
+  });
+  const destLabel = document.getElementById("dest-label");
+  const destHelp = document.getElementById("dest-help");
+  const ssdLabel = document.getElementById("ssd-label");
+  const ssdHelp = document.getElementById("ssd-help");
+  if (target === "nas") {
+    destLabel.textContent = "Folder on the share";
+    destHelp.textContent = "Where files land after the share is mounted.";
+    ssdLabel.textContent = "Volume name";
+    ssdHelp.textContent = "The name this computer gives the share. SyncDrop matches it when the share connects.";
+  } else {
+    destLabel.textContent = "Destination folder";
+    destHelp.textContent = "Folder on the drive.";
+    ssdLabel.textContent = "Drive name";
+    ssdHelp.textContent = "The name of the physical disk SyncDrop watches for.";
+  }
+  const warn = document.getElementById("mirror-warn");
+  warn.hidden = document.querySelector('input[name="mode"]:checked')?.value !== "mirror";
 }
 
 function selectTab(id) {
-  document.querySelectorAll(".tabs button").forEach((button) => {
+  document.querySelectorAll(".tabs [role=tab]").forEach((button) => {
     const on = button.dataset.tab === id;
     button.setAttribute("aria-selected", on ? "true" : "false");
+    button.tabIndex = on ? 0 : -1;
   });
-  document.querySelectorAll(".panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === id);
+  for (const panel of ["sync", "rules", "activity", "about"]) {
+    document.getElementById(panel).hidden = panel !== id;
+  }
+  if (id === "activity" && document.getElementById("logs-pane") && !document.getElementById("logs-pane").hidden) {
+    refreshLogs();
+  }
+}
+
+function selectActivity(id) {
+  document.querySelectorAll("#activity [role=tab]").forEach((button) => {
+    const on = button.dataset.activity === id;
+    button.setAttribute("aria-selected", on ? "true" : "false");
+    button.tabIndex = on ? 0 : -1;
   });
+  document.getElementById("history-pane").hidden = id !== "history";
+  document.getElementById("logs-pane").hidden = id !== "logs";
   if (id === "logs") refreshLogs();
+}
+
+function moveTabs(event, selector, read, choose) {
+  const tabs = [...document.querySelectorAll(selector)];
+  const index = tabs.indexOf(document.activeElement);
+  if (index < 0) return;
+  let next = null;
+  if (event.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+  if (event.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+  if (event.key === "Home") next = tabs[0];
+  if (event.key === "End") next = tabs[tabs.length - 1];
+  if (!next) return;
+  event.preventDefault();
+  choose(read(next));
+  next.focus();
 }
 
 function paintChips() {
@@ -100,7 +245,7 @@ function paintChips() {
     remove.setAttribute("aria-label", `Remove ${pattern}`);
     remove.onclick = () => {
       excludes = excludes.filter((item) => item !== pattern);
-      formDirty = true;
+      markDirty();
       paintChips();
     };
     chip.append(label, remove);
@@ -108,56 +253,144 @@ function paintChips() {
   }
 }
 
+function selectionInside(root) {
+  const sel = document.getSelection();
+  if (!sel || sel.isCollapsed || !sel.anchorNode) return false;
+  return root.contains(sel.anchorNode);
+}
+
 function paintSidebar() {
   const list = document.getElementById("profile-list");
-  list.replaceChildren();
-  for (const item of state.profiles) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "profile-row";
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", item.id === state.activeProfileId ? "true" : "false");
-    const dot = document.createElement("span");
-    dot.className = `dot ${statusOf(item)}`;
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = item.name;
-    row.append(dot, name);
-    row.onclick = async () => {
-      if (item.id === state.activeProfileId) return;
-      try {
-        await invoke("activate_profile", { id: item.id });
-        formDirty = false;
-        await reload(true);
-      } catch (err) {
-        toast(String(err), true);
-      }
-    };
-    list.append(row);
+  const ids = state.profiles.map((item) => item.id).join("\n");
+  const same = list.dataset.ids === ids && list.childElementCount === state.profiles.length;
+  if (!same) {
+    const focusId = document.activeElement?.dataset?.profileId || "";
+    list.replaceChildren();
+    state.profiles.forEach((item, index) => list.append(profileOption(item, index)));
+    list.dataset.ids = ids;
+    if (focusId) {
+      const again = list.querySelector(`[data-profile-id="${focusId}"]`);
+      if (again) again.focus();
+    }
+    return;
   }
+  state.profiles.forEach((item, index) => fillProfileOption(list.children[index], item, index));
+}
+
+function profileOption(item, index) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "profile-row";
+  row.setAttribute("role", "option");
+  row.dataset.profileId = item.id;
+  const name = document.createElement("span");
+  name.className = "name";
+  const status = document.createElement("span");
+  status.className = "status";
+  row.append(name, status);
+  row.onclick = () => selectProfile(item.id);
+  fillProfileOption(row, item, index);
+  return row;
+}
+
+function fillProfileOption(row, item, index) {
+  const on = item.id === (selected()?.id);
+  row.setAttribute("aria-selected", on ? "true" : "false");
+  row.tabIndex = on || (index === 0 && !selected()) ? 0 : -1;
+  row.querySelector(".name").textContent = item.name;
+  const text = statusText(item);
+  const active = item.id === state.activeProfileId;
+  const label = active ? `${text} · Active` : text;
+  const status = row.querySelector(".status");
+  status.title = active ? "Tray menu actions use this profile" : "";
+  if (status.dataset.label !== label) {
+    status.replaceChildren(glyph(statusKind(text)), document.createTextNode(label));
+    status.dataset.label = label;
+  }
+}
+
+function blockReason(profile) {
+  if (formDirty) return "Save changes first";
+  const source = (profile.sourcePath || "").trim();
+  const target = targetOf(profile);
+  const dest = target === "google"
+    ? ((state.googleFolder || "").trim() || "SyncDrop")
+    : (profile.destPath || "").trim();
+  if (!source) return "Choose a source folder first.";
+  if (!dest) return "Choose a destination first.";
+  if (target === "google" && !state.googleSignedIn) return "Sign in to Google Drive first.";
+  if (target !== "google" && !(liveOf(profile.id) && liveOf(profile.id).connected)) {
+    return target === "nas" ? "This share is not connected." : "This drive is not connected.";
+  }
+  if (state.syncing && state.syncingProfileId && state.syncingProfileId !== profile.id) {
+    return "Another profile is syncing.";
+  }
+  return "";
 }
 
 function paintHeader() {
-  const profile = active();
-  document.getElementById("profile-heading").textContent = profile ? profile.name : "No profile";
-  const drive = document.getElementById("drive-state");
-  if (state.connected) {
-    const mount = state.mount && !state.mount.startsWith("gdrive:") ? state.mount : "connected";
-    drive.textContent = `Drive connected · ${mount}`;
-  } else {
-    drive.textContent = "Drive not connected";
+  const profile = selected();
+  const heading = document.getElementById("profile-heading");
+  const stateLine = document.getElementById("drive-state");
+  if (!profile) {
+    heading.textContent = "No profile";
+    stateLine.textContent = "Not connected";
+    document.getElementById("fail-reason").hidden = true;
+    document.getElementById("sync-reason").hidden = true;
+    document.getElementById("eject").hidden = true;
+    document.getElementById("active-help").hidden = true;
+    return;
   }
-  const profileName = profile ? profile.name : "";
-  const last = (state.history || []).find((row) => !row.profileName || row.profileName === profileName);
+  heading.textContent = targetTitle(profile);
+  const text = statusText(profile);
+  stateLine.replaceChildren(glyph(statusKind(text)), document.createTextNode(text));
+  const last = lastOf(profile);
   document.getElementById("last-sync").textContent = last ? relative(last.at) : "No sync yet";
-  document.getElementById("eject").disabled = !state.connected || !state.mount || state.mount.startsWith("gdrive:");
-  const busy = !!(state.syncing || state.previewing);
-  document.getElementById("sync-now").disabled = busy;
-  document.getElementById("dry-run").disabled = busy;
+  const live = liveOf(profile.id);
+  const free = document.getElementById("free-space");
+  free.textContent = live && live.freeBytes != null && targetOf(profile) === "drive"
+    ? ` · ${bytes(live.freeBytes)} free`
+    : "";
+  const mine = state.syncing && state.syncingProfileId === profile.id && state.progress?.state === "running";
+  const failed = !!(last && !last.succeeded && !mine);
+  const failEl = document.getElementById("fail-reason");
+  failEl.hidden = !failed;
+  failEl.textContent = failed ? (last.error || "The last sync did not finish.") : "";
+  const reason = blockReason(profile);
+  const reasonEl = document.getElementById("sync-reason");
+  reasonEl.hidden = !reason;
+  reasonEl.textContent = reason;
+  const progress = document.getElementById("hero-progress");
+  if (mine) {
+    const view = state.progress || {};
+    const pct = Math.round(view.percent || 0).toLocaleString();
+    const files = `${(view.filesDone || 0).toLocaleString()} / ${(view.filesTotal || 0).toLocaleString()} files`;
+    progress.hidden = false;
+    progress.textContent = `${pct}% · ${files} · ETA ${eta(view.etaSecs)}`;
+  } else {
+    progress.hidden = true;
+  }
+  const syncNow = document.getElementById("sync-now");
+  syncNow.hidden = !!mine;
+  syncNow.textContent = failed ? "Retry" : "Sync now";
+  syncNow.disabled = !!reason || state.syncing;
+  document.getElementById("cancel-sync").hidden = !mine;
+  document.getElementById("dry-run").disabled = !!reason || state.syncing;
+  const drive = targetOf(profile) === "drive";
+  const ejectable = !!(drive && live && live.ejectable);
+  const eject = document.getElementById("eject");
+  eject.hidden = !drive;
+  eject.disabled = !ejectable || state.syncing;
+  eject.title = ejectable ? "Eject the drive" : "Nothing to eject";
+  const make = document.getElementById("make-active");
+  const isActive = profile.id === state.activeProfileId;
+  make.hidden = isActive;
+  document.getElementById("active-help").hidden = !isActive;
+  document.getElementById("first-run").hidden = !!(profile.destPath || "").trim();
 }
 
 function paintForm() {
-  const profile = active();
+  const profile = selected();
   document.getElementById("loading").hidden = true;
   if (!profile) return;
   document.getElementById("profile-name").value = profile.name || "";
@@ -167,13 +400,18 @@ function paintForm() {
   document.getElementById("nas-host").value = profile.nasHost || "";
   document.getElementById("nas-share").value = profile.nasShare || "";
   document.getElementById("nas-user").value = profile.nasUsername || "";
-  document.getElementById("auto-mount").checked = !!profile.autoMountNas;
-  document.getElementById("auto-sync").checked = !!profile.autoSync;
-  document.getElementById("mirror").checked = !!profile.mirrorMode;
-  document.getElementById("auto-eject").checked = !!profile.autoEject;
-  document.getElementById("keep-versions").checked = !!profile.keepVersions;
-  document.getElementById("notify").checked = !!state.notifyOnComplete;
-  document.getElementById("launch").checked = !!state.launchAtLogin;
+  document.getElementById("nas-password").value = "";
+  setChecked("auto-mount", !!profile.autoMountNas);
+  setChecked("auto-sync", !!profile.autoSync);
+  setChecked("auto-eject", !!profile.autoEject);
+  setChecked("keep-versions", !!profile.keepVersions);
+  const target = targetOf(profile);
+  document.querySelectorAll('input[name="target"]').forEach((input) => {
+    input.checked = input.value === target;
+  });
+  document.querySelectorAll('input[name="mode"]').forEach((input) => {
+    input.checked = profile.mirrorMode ? input.value === "mirror" : input.value === "copy";
+  });
   document.getElementById("client-id").value = state.googleClientId || "";
   document.getElementById("gfolder").value = state.googleFolder || "SyncDrop";
   document.getElementById("google-state").textContent = state.googleSignedIn
@@ -183,70 +421,247 @@ function paintForm() {
     ? "A client secret is in the keychain."
     : "No client secret saved.";
   excludes = (profile.excludes || []).slice();
+  applyTarget(target);
   paintChips();
   paintHistory();
+  paintPrefs();
+}
+
+function paintPrefs() {
+  setChecked("notify", !!state.notifyOnComplete);
+  setChecked("launch", !!state.launchAtLogin);
 }
 
 function paintHistory() {
   const body = document.getElementById("history-body");
-  body.replaceChildren();
-  for (const row of state.history || []) {
-    const tr = document.createElement("tr");
-    const cells = [
-      row.date,
-      row.profileName || "—",
-      String(row.fileCount),
-      row.size,
-      row.duration,
-    ];
-    for (const text of cells) {
-      const td = document.createElement("td");
-      td.textContent = text;
-      tr.append(td);
-    }
-    const status = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = row.succeeded ? "badge ok" : "badge bad";
-    badge.textContent = row.succeeded ? "OK" : "Failed";
-    status.append(badge);
-    tr.append(status);
-    body.append(tr);
+  if (selectionInside(body)) return;
+  const profile = selected();
+  const rows = (state.history || []).filter((row) => profile && row.profileId === profile.id);
+  const signature = rows.map((row) => row.id).join("\n");
+  if (body.dataset.signature === signature && body.childElementCount === rows.length * 2) {
+    rows.forEach((row, index) => fillHistoryRow(body.children[index * 2], row));
+    document.getElementById("history-empty").hidden = rows.length > 0;
+    return;
   }
-  document.getElementById("history-empty").hidden = (state.history || []).length > 0;
+  const focusId = document.activeElement?.dataset?.recordId || "";
+  body.replaceChildren();
+  body.dataset.signature = signature;
+  for (const row of rows) {
+    const built = historyRow(row);
+    body.append(built.tr, built.extra);
+  }
+  document.getElementById("history-empty").hidden = rows.length > 0;
+  if (focusId) {
+    const again = body.querySelector(`[data-record-id="${focusId}"]`);
+    if (again) again.focus();
+  }
+}
+
+function historyRow(row) {
+  const tr = document.createElement("tr");
+  const when = document.createElement("td");
+  when.className = "num";
+  const profileCell = document.createElement("td");
+  const files = document.createElement("td");
+  files.className = "num";
+  const size = document.createElement("td");
+  size.className = "num";
+  const duration = document.createElement("td");
+  duration.className = "num";
+  const status = document.createElement("td");
+  const badge = document.createElement("span");
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "disclosure";
+  toggle.dataset.recordId = row.id;
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.textContent = "Details";
+  status.append(badge, toggle);
+  tr.append(when, profileCell, files, size, duration, status);
+  const extra = historyDetail(row);
+  toggle.onclick = () => {
+    extra.hidden = !extra.hidden;
+    toggle.setAttribute("aria-expanded", extra.hidden ? "false" : "true");
+  };
+  fillHistoryRow(tr, row);
+  return { tr, extra };
+}
+
+function historyDetail(row) {
+  const extra = document.createElement("tr");
+  extra.className = "details";
+  extra.hidden = true;
+  const td = document.createElement("td");
+  td.colSpan = 6;
+  td.textContent = row.succeeded ? "Completed." : (row.error || "The sync failed.");
+  extra.append(td);
+  return extra;
+}
+
+function fillHistoryRow(tr, row) {
+  const cells = tr.children;
+  cells[0].textContent = row.date;
+  cells[1].textContent = row.profileName || "—";
+  cells[2].textContent = (row.fileCount || 0).toLocaleString();
+  cells[3].textContent = row.size;
+  cells[4].textContent = row.duration;
+  const badge = cells[5].querySelector(".badge") || cells[5].querySelector("span");
+  badge.className = row.succeeded ? "badge ok" : "badge bad";
+  badge.textContent = row.succeeded ? "Succeeded" : "Failed";
+  badge.title = row.error || "";
+  const toggle = cells[5].querySelector(".disclosure");
+  toggle.setAttribute("aria-label", row.succeeded ? "Show sync details" : "Show failure reason");
+  const extra = tr.nextElementSibling;
+  if (extra && extra.classList.contains("details")) {
+    extra.querySelector("td").textContent = row.succeeded ? "Completed." : (row.error || "The sync failed.");
+  }
 }
 
 function profileFromForm() {
-  const profile = { ...active() };
+  const profile = { ...selected() };
+  const target = currentTarget();
   profile.name = document.getElementById("profile-name").value.trim() || profile.name;
   profile.sourcePath = document.getElementById("source").value.trim();
-  profile.destPath = document.getElementById("dest").value.trim();
-  profile.ssdName = document.getElementById("ssd").value.trim();
-  profile.nasHost = emptyToNull(document.getElementById("nas-host").value);
-  profile.nasShare = emptyToNull(document.getElementById("nas-share").value);
-  profile.nasUsername = emptyToNull(document.getElementById("nas-user").value);
-  profile.autoMountNas = document.getElementById("auto-mount").checked;
+  profile.mirrorMode = document.querySelector('input[name="mode"]:checked')?.value === "mirror";
+  profile.autoSync = checked("auto-sync");
+  profile.autoEject = target === "drive" && checked("auto-eject");
+  profile.keepVersions = target !== "google" && checked("keep-versions");
   profile.excludes = excludes.slice();
-  profile.autoSync = document.getElementById("auto-sync").checked;
-  profile.mirrorMode = document.getElementById("mirror").checked;
-  profile.autoEject = document.getElementById("auto-eject").checked;
-  profile.keepVersions = document.getElementById("keep-versions").checked;
+  if (target === "google") {
+    const folder = document.getElementById("gfolder").value.trim() || "SyncDrop";
+    profile.destPath = `Google Drive Cloud: /${folder}`;
+    profile.ssdName = "Google Drive (Cloud)";
+    profile.nasHost = null;
+    profile.nasShare = null;
+    profile.nasUsername = null;
+    profile.autoMountNas = false;
+  } else if (target === "nas") {
+    profile.destPath = document.getElementById("dest").value.trim();
+    profile.ssdName = document.getElementById("ssd").value.trim();
+    profile.nasHost = emptyToNull(document.getElementById("nas-host").value);
+    profile.nasShare = emptyToNull(document.getElementById("nas-share").value);
+    profile.nasUsername = emptyToNull(document.getElementById("nas-user").value);
+    profile.autoMountNas = checked("auto-mount");
+  } else {
+    profile.destPath = document.getElementById("dest").value.trim();
+    profile.ssdName = document.getElementById("ssd").value.trim();
+    profile.nasHost = null;
+    profile.nasShare = null;
+    profile.nasUsername = null;
+    profile.autoMountNas = false;
+  }
   return profile;
 }
 
 async function reload(full) {
   state = await invoke("get_state");
+  if (!state.profiles.some((profile) => profile.id === selectedId)) {
+    selectedId = state.activeProfileId || state.profiles[0]?.id || null;
+  }
+  if (full) paintForm();
+  else {
+    paintHistory();
+    paintGoogleStatus();
+  }
   paintSidebar();
-  paintHeader();
-  if (full || !formDirty) paintForm();
-  else paintHistory();
+  if (document.getElementById("prefs-main").hidden) paintHeader();
+  else paintPrefs();
+}
+
+function paintGoogleStatus() {
+  if (!state) return;
+  document.getElementById("google-state").textContent = state.googleSignedIn
+    ? `Signed in${state.googleEmail ? ` · ${state.googleEmail}` : ""}`
+    : "Not signed in";
+  document.getElementById("secret-state").textContent = state.googleHasSecret
+    ? "A client secret is in the keychain."
+    : "No client secret saved.";
+}
+
+async function saveGoogleFields() {
+  await invoke("set_google_client_id", { value: document.getElementById("client-id").value });
+  const secret = document.getElementById("client-secret").value;
+  if (secret) await invoke("set_google_client_secret", { value: secret });
+  await invoke("set_google_folder", { value: document.getElementById("gfolder").value });
+  document.getElementById("client-secret").value = "";
 }
 
 async function saveProfile() {
   clearErrors();
-  await invoke("save_profile", { profile: profileFromForm() });
+  const profile = profileFromForm();
+  if (currentTarget() === "google") await saveGoogleFields();
+  await invoke("save_profile", { profile });
+  const password = document.getElementById("nas-password").value;
+  if (currentTarget() === "nas" && password.trim()) {
+    await invoke("set_nas_password", { profileId: profile.id, password });
+    document.getElementById("nas-password").value = "";
+  }
   formDirty = false;
+  showSavebar();
   await reload(true);
   toast("Saved");
+}
+
+async function confirmLeave() {
+  if (!formDirty) return true;
+  const choice = await openDialog({
+    title: "Unsaved changes",
+    body: "Save this profile before leaving it?",
+    ok: "Save",
+    discard: "Discard",
+  });
+  if (choice === "cancel") return false;
+  if (choice === "save") {
+    try {
+      await saveProfile();
+    } catch (err) {
+      showIssues(err);
+      return false;
+    }
+  } else {
+    formDirty = false;
+    paintForm();
+    showSavebar();
+  }
+  return true;
+}
+
+async function selectProfile(id) {
+  if (id === selected()?.id && document.getElementById("prefs-main").hidden) return;
+  if (!(await confirmLeave())) return;
+  selectedId = id;
+  document.getElementById("profile-main").hidden = false;
+  document.getElementById("prefs-main").hidden = true;
+  document.getElementById("open-prefs").removeAttribute("aria-current");
+  formDirty = false;
+  paintForm();
+  paintSidebar();
+  paintHeader();
+  showSavebar();
+}
+
+function openDialog({ title, body, ok, discard, danger }) {
+  return new Promise((resolve) => {
+    document.getElementById("dialog-title").textContent = title;
+    document.getElementById("dialog-body").textContent = body;
+    const okBtn = document.getElementById("dialog-ok");
+    const discardBtn = document.getElementById("dialog-discard");
+    okBtn.textContent = ok;
+    okBtn.classList.toggle("danger", !!danger);
+    okBtn.classList.toggle("primary", !danger);
+    discardBtn.hidden = !discard;
+    if (discard) discardBtn.textContent = discard;
+    const finish = (value) => {
+      dialogWait = null;
+      document.getElementById("dialog").close();
+      resolve(value);
+    };
+    dialogWait = finish;
+    okBtn.onclick = () => finish("ok");
+    discardBtn.onclick = () => finish("discard");
+    document.getElementById("dialog-cancel").onclick = () => finish("cancel");
+    document.getElementById("dialog").showModal();
+  });
 }
 
 async function pickFolder(title) {
@@ -268,7 +683,7 @@ function addExclude() {
   }
   excludes.push(pattern);
   input.value = "";
-  formDirty = true;
+  markDirty();
   paintChips();
 }
 
@@ -278,133 +693,254 @@ function levelRank(line) {
   return "info";
 }
 
+function visibleLogs(lines) {
+  const min = document.getElementById("log-level").value;
+  const query = document.getElementById("log-search").value.trim().toLowerCase();
+  const rank = { info: 0, warn: 1, error: 2 };
+  return lines.filter((line) => {
+    if (rank[levelRank(line)] < rank[min]) return false;
+    if (query && !line.toLowerCase().includes(query)) return false;
+    return true;
+  });
+}
+
 async function refreshLogs() {
+  const pane = document.getElementById("logs-pane");
   const view = document.getElementById("log-view");
-  if (!view || !document.getElementById("logs").classList.contains("active")) return;
+  if (!pane || pane.hidden) return;
   let lines = [];
   try {
-    lines = await invoke("get_recent_logs", { limit: 400 });
+    lines = await invoke("get_recent_logs", { limit: 2000 });
   } catch (err) {
     document.getElementById("log-empty").hidden = false;
     document.getElementById("log-empty").textContent = String(err);
     return;
   }
-  const min = document.getElementById("log-level").value;
-  const query = document.getElementById("log-search").value.trim().toLowerCase();
-  const rank = { info: 0, warn: 1, error: 2 };
-  const shown = lines.filter((line) => {
-    if (rank[levelRank(line)] < rank[min]) return false;
-    if (query && !line.toLowerCase().includes(query)) return false;
-    return true;
-  });
+  const shown = visibleLogs(lines);
+  const snapshot = shown.join("\n");
+  if (selectionInside(view)) return;
+  if (view.dataset.snapshot === snapshot) {
+    if (checked("auto-scroll")) view.scrollTop = view.scrollHeight;
+    document.getElementById("log-empty").hidden = shown.length > 0;
+    return;
+  }
+  view.dataset.snapshot = snapshot;
   view.replaceChildren();
   for (const line of shown) {
     const row = document.createElement("div");
-    row.className = `log-line ${levelRank(line)}`;
+    row.className = `log-line log-${levelRank(line)}`;
     row.textContent = line;
     view.append(row);
   }
   document.getElementById("log-empty").hidden = shown.length > 0;
   document.getElementById("log-empty").textContent = "No log lines yet.";
+  if (checked("auto-scroll")) view.scrollTop = view.scrollHeight;
 }
 
-document.querySelectorAll(".tabs button").forEach((button) => {
+function wireSwitch(id, onChange) {
+  document.getElementById(id).onclick = () => {
+    const next = !checked(id);
+    setChecked(id, next);
+    if (onChange) onChange(next);
+    else markDirty();
+  };
+}
+
+document.getElementById("dialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  if (dialogWait) dialogWait("cancel");
+});
+
+document.querySelector(".tabs").addEventListener("keydown", (event) => {
+  moveTabs(event, ".tabs [role=tab]", (button) => button.dataset.tab, selectTab);
+});
+document.querySelector("#activity .segment").addEventListener("keydown", (event) => {
+  moveTabs(event, "#activity [role=tab]", (button) => button.dataset.activity, selectActivity);
+});
+document.querySelectorAll(".tabs [role=tab]").forEach((button) => {
   button.onclick = () => selectTab(button.dataset.tab);
+});
+document.querySelectorAll("#activity [role=tab]").forEach((button) => {
+  button.onclick = () => selectActivity(button.dataset.activity);
+});
+
+document.getElementById("profile-list").addEventListener("keydown", (event) => {
+  const options = [...document.querySelectorAll("#profile-list [role=option]")];
+  const index = options.indexOf(document.activeElement);
+  if (index < 0) return;
+  let next = index;
+  if (event.key === "ArrowDown") next = Math.min(options.length - 1, index + 1);
+  else if (event.key === "ArrowUp") next = Math.max(0, index - 1);
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = options.length - 1;
+  else return;
+  event.preventDefault();
+  options[next].focus();
+  const profile = state.profiles[next];
+  if (profile) selectProfile(profile.id);
 });
 
 document.querySelectorAll("input, select").forEach((el) => {
-  if (el.id === "log-search" || el.id === "log-level" || el.id === "new-name" || el.id === "exclude-input") return;
-  el.addEventListener("input", () => { formDirty = true; });
-  el.addEventListener("change", () => { formDirty = true; });
+  if (["log-search", "log-level", "new-name", "exclude-input", "redirect-uri"].includes(el.id)) return;
+  const touch = () => {
+    markDirty();
+    if (el.name === "target") {
+      if (el.value !== "google") {
+        const dest = document.getElementById("dest");
+        if (/Google Drive/i.test(dest.value)) dest.value = "";
+        const ssd = document.getElementById("ssd");
+        if (ssd.value === "Google Drive (Cloud)") ssd.value = "";
+      }
+      applyTarget(el.value);
+    }
+    if (el.name === "mode") applyTarget(currentTarget());
+    paintHeader();
+  };
+  el.addEventListener("input", touch);
+  el.addEventListener("change", touch);
 });
+
+["auto-sync", "auto-eject", "keep-versions", "auto-mount"].forEach((id) => wireSwitch(id));
+wireSwitch("notify", (value) => {
+  invoke("set_notify_on_complete", { value }).catch((err) => toast(String(err), true));
+});
+wireSwitch("launch", (value) => {
+  invoke("set_launch_at_login", { value }).catch((err) => toast(String(err), true));
+});
+wireSwitch("auto-scroll", () => {});
+
+document.getElementById("save-hint").textContent = apple ? "⌘S" : "Ctrl+S";
 
 document.getElementById("add-form").onsubmit = async (event) => {
   event.preventDefault();
+  if (!(await confirmLeave())) return;
   const name = document.getElementById("new-name").value.trim() || "Profile";
   try {
-    await invoke("add_profile", { name });
+    selectedId = await invoke("add_profile", { name });
     document.getElementById("new-name").value = "";
     formDirty = false;
     await reload(true);
+    toast("Profile added");
   } catch (err) {
     toast(String(err), true);
   }
 };
 
+document.getElementById("open-prefs").onclick = async () => {
+  if (!(await confirmLeave())) return;
+  document.getElementById("profile-main").hidden = true;
+  document.getElementById("prefs-main").hidden = false;
+  document.getElementById("open-prefs").setAttribute("aria-current", "page");
+  document.getElementById("savebar").hidden = true;
+  paintPrefs();
+};
+
 document.getElementById("pick-source").onclick = async () => {
   const path = await pickFolder("Choose source folder");
-  if (path) {
-    document.getElementById("source").value = path;
-    formDirty = true;
-  }
+  if (!path) return;
+  document.getElementById("source").value = path;
+  markDirty();
+  paintHeader();
 };
 
 document.getElementById("pick-dest").onclick = async () => {
   const path = await pickFolder("Choose destination folder");
-  if (path) {
-    document.getElementById("dest").value = path;
-    formDirty = true;
-  }
-};
-
-document.getElementById("pick-gdrive").onclick = async () => {
-  const path = await pickFolder("Choose a folder inside Google Drive");
   if (!path) return;
   document.getElementById("dest").value = path;
-  const ssd = document.getElementById("ssd");
-  if (!ssd.value || ssd.value === "Extreme Pro") ssd.value = "Google Drive";
-  formDirty = true;
+  markDirty();
+  paintHeader();
 };
 
-document.getElementById("use-cloud").onclick = () => {
-  const folder = document.getElementById("gfolder").value.trim() || "SyncDrop";
-  document.getElementById("dest").value = `Google Drive Cloud: /${folder}`;
-  document.getElementById("ssd").value = "Google Drive (Cloud)";
-  formDirty = true;
+document.getElementById("save").onclick = () => saveProfile().catch(showIssues);
+document.getElementById("revert").onclick = () => {
+  formDirty = false;
+  paintForm();
+  paintHeader();
+  showSavebar();
 };
 
-document.getElementById("save-general").onclick = () => saveProfile().catch(showIssues);
-document.getElementById("save-excludes").onclick = () => saveProfile().catch(showIssues);
-document.getElementById("save-network").onclick = () => saveProfile().catch(showIssues);
-
-document.getElementById("save-behavior").onclick = async () => {
+document.getElementById("make-active").onclick = async () => {
+  const profile = selected();
+  if (!profile) return;
   try {
-    await invoke("set_notify_on_complete", { value: document.getElementById("notify").checked });
-    await invoke("set_launch_at_login", { value: document.getElementById("launch").checked });
-    await saveProfile();
+    await invoke("activate_profile", { id: profile.id });
+    await reload(false);
+    toast("This profile is active");
   } catch (err) {
-    showIssues(err);
+    toast(String(err), true);
   }
+};
+
+document.getElementById("sync-now").onclick = () => {
+  const profile = selected();
+  if (!profile) return;
+  invoke("sync_now", { profileId: profile.id, confirmed: false }).catch(showIssues);
+};
+
+document.getElementById("dry-run").onclick = () => {
+  const profile = selected();
+  if (!profile) return;
+  invoke("dry_run", { profileId: profile.id }).catch(showIssues);
+};
+
+document.getElementById("cancel-sync").onclick = () => {
+  invoke("cancel_sync").then(() => reload(false)).catch((err) => toast(String(err), true));
+};
+
+document.getElementById("eject").onclick = () => {
+  const profile = selected();
+  if (!profile) return;
+  invoke("eject", { profileId: profile.id }).then(() => reload(false)).catch((err) => toast(String(err), true));
 };
 
 document.getElementById("delete-profile").onclick = async () => {
-  const profile = active();
+  const profile = selected();
   if (!profile) return;
-  const before = state.profiles.length;
+  const choice = await openDialog({
+    title: "Delete profile",
+    body: `Delete “${profile.name}”? Files already copied stay where they are.`,
+    ok: "Delete profile",
+    danger: true,
+  });
+  if (choice !== "ok") return;
   try {
     await invoke("delete_profile", { id: profile.id });
     formDirty = false;
+    selectedId = null;
     await reload(true);
-    toast(state.profiles.length < before ? "Profile deleted" : "The last profile stays");
+    toast("Profile deleted");
   } catch (err) {
     toast(String(err), true);
   }
 };
 
 document.getElementById("set-password").onclick = async () => {
+  const profile = selected();
+  if (!profile) return;
   try {
-    await saveProfile();
-    await invoke("set_nas_password", { password: document.getElementById("nas-password").value });
+    await invoke("set_nas_password", {
+      profileId: profile.id,
+      password: document.getElementById("nas-password").value,
+    });
     document.getElementById("nas-password").value = "";
     toast("Password saved in the keychain");
   } catch (err) {
-    showIssues(err);
+    toast(String(err), true);
   }
 };
 
 document.getElementById("clear-password").onclick = async () => {
+  const profile = selected();
+  if (!profile) return;
+  const choice = await openDialog({
+    title: "Remove password",
+    body: "Remove the saved password for this share?",
+    ok: "Remove password",
+    danger: true,
+  });
+  if (choice !== "ok") return;
   try {
-    await invoke("delete_nas_password");
+    await invoke("delete_nas_password", { profileId: profile.id });
     document.getElementById("nas-password").value = "";
     toast("Password removed");
   } catch (err) {
@@ -412,36 +948,25 @@ document.getElementById("clear-password").onclick = async () => {
   }
 };
 
-document.getElementById("save-google").onclick = async () => {
+document.getElementById("copy-redirect").onclick = async () => {
   try {
-    await invoke("set_google_client_id", { value: document.getElementById("client-id").value });
-    const secret = document.getElementById("client-secret").value;
-    if (secret) await invoke("set_google_client_secret", { value: secret });
-    await invoke("set_google_folder", { value: document.getElementById("gfolder").value });
-    document.getElementById("client-secret").value = "";
-    await reload(false);
-    toast("Google credentials saved");
+    const uri = await invoke("google_redirect_uri");
+    document.getElementById("redirect-uri").value = uri;
+    await navigator.clipboard.writeText(uri);
+    toast("Redirect URI copied");
   } catch (err) {
     toast(String(err), true);
   }
 };
 
-document.getElementById("use-folder").onclick = async () => {
-  try {
-    await invoke("set_google_folder", { value: document.getElementById("gfolder").value });
-    document.getElementById("use-cloud").click();
-    await saveProfile();
-    toast("This profile syncs to Google Drive");
-  } catch (err) {
-    showIssues(err);
-  }
+document.getElementById("open-console").onclick = () => {
+  invoke("open_external", { url: "https://console.cloud.google.com/apis/credentials" })
+    .catch((err) => toast(String(err), true));
 };
 
 document.getElementById("sign-in").onclick = async () => {
   try {
-    await invoke("set_google_client_id", { value: document.getElementById("client-id").value });
-    const secret = document.getElementById("client-secret").value;
-    if (secret) await invoke("set_google_client_secret", { value: secret });
+    await saveGoogleFields();
     toast("Waiting for the browser…");
     await invoke("google_sign_in");
   } catch (err) {
@@ -459,30 +984,21 @@ document.getElementById("sign-out").onclick = async () => {
   }
 };
 
-document.getElementById("open-console").onclick = () => {
-  invoke("open_external", { url: "https://console.cloud.google.com/apis/credentials" })
-    .catch((err) => toast(String(err), true));
-};
-
 document.getElementById("clear-history").onclick = async () => {
+  const choice = await openDialog({
+    title: "Clear history",
+    body: "Remove every recorded sync from this computer?",
+    ok: "Clear history",
+    danger: true,
+  });
+  if (choice !== "ok") return;
   try {
     await invoke("clear_history");
     await reload(false);
+    toast("History cleared");
   } catch (err) {
     toast(String(err), true);
   }
-};
-
-document.getElementById("sync-now").onclick = () => {
-  invoke("sync_now").catch(showIssues);
-};
-
-document.getElementById("dry-run").onclick = () => {
-  invoke("dry_run").catch(showIssues);
-};
-
-document.getElementById("eject").onclick = () => {
-  invoke("eject").then(() => reload(false)).catch((err) => toast(String(err), true));
 };
 
 document.getElementById("add-exclude").onclick = addExclude;
@@ -495,22 +1011,63 @@ document.getElementById("exclude-input").addEventListener("keydown", (event) => 
 
 document.getElementById("log-level").onchange = refreshLogs;
 document.getElementById("log-search").oninput = refreshLogs;
+document.getElementById("copy-logs").onclick = async () => {
+  try {
+    const lines = visibleLogs(await invoke("get_recent_logs", { limit: 2000 }));
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast(lines.length ? "Logs copied" : "Nothing to copy");
+  } catch (err) {
+    toast(String(err), true);
+  }
+};
 document.getElementById("open-logs").onclick = () => {
   invoke("open_logs_folder").catch((err) => toast(String(err), true));
 };
+
+document.addEventListener("keydown", (event) => {
+  if (document.getElementById("dialog").open) return;
+  const mod = apple ? event.metaKey : event.ctrlKey;
+  if (!mod) return;
+  const key = event.key.toLowerCase();
+  if (key === "s") {
+    event.preventDefault();
+    if (formDirty) document.getElementById("save").click();
+  } else if (key === "r") {
+    event.preventDefault();
+    if (!document.getElementById("sync-now").hidden) document.getElementById("sync-now").click();
+  } else if (event.key === ".") {
+    event.preventDefault();
+    if (!document.getElementById("cancel-sync").hidden) document.getElementById("cancel-sync").click();
+  } else if (event.key === ",") {
+    event.preventDefault();
+    document.getElementById("open-prefs").click();
+  }
+});
 
 window.__TAURI__.event.listen("google-status", (event) => {
   const payload = event.payload || {};
   toast(payload.ok ? "Signed in to Google Drive" : (payload.error || "Sign-in failed"), !payload.ok);
   reload(false).catch((err) => toast(String(err), true));
 });
+window.__TAURI__.event.listen("sync-progress", () => {
+  reload(false).catch(() => {});
+});
+window.__TAURI__.event.listen("ui-state", () => {
+  reload(false).catch(() => {});
+});
+
+document.getElementById("save-hint").textContent = apple ? "⌘S" : "Ctrl+S";
+invoke("app_version").then((version) => {
+  document.getElementById("app-version").textContent = version;
+}).catch(() => {});
+invoke("google_redirect_uri").then((uri) => {
+  document.getElementById("redirect-uri").value = uri;
+}).catch(() => {});
 
 logTimer = setInterval(refreshLogs, 2000);
-setInterval(() => {
-  if (!state) return;
-  reload(false).catch(() => {});
-}, 3000);
 
+selectTab("sync");
+selectActivity("history");
 reload(true).catch((err) => {
   document.getElementById("loading").textContent = String(err);
   toast(String(err), true);

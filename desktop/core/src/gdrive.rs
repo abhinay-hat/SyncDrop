@@ -158,6 +158,14 @@ mod oauth {
         (verifier, challenge)
     }
 
+    /// Path the loopback listener serves. The port is chosen when sign-in starts.
+    pub const OAUTH_CALLBACK_PATH: &str = "/oauth2callback";
+
+    /// Redirect URI to register for the desktop client. Sign-in appends the live port.
+    pub fn oauth_redirect_uri() -> String {
+        format!("http://127.0.0.1{OAUTH_CALLBACK_PATH}")
+    }
+
     /// Installed-app authorize URL: loopback redirect, S256, offline consent.
     pub fn build_auth_url(
         client_id: &str,
@@ -412,7 +420,7 @@ mod oauth {
                 .local_addr()
                 .map_err(|_| GoogleOAuthError::ServerStartFailed)?
                 .port();
-            let redirect = format!("http://127.0.0.1:{port}/oauth2callback");
+            let redirect = format!("http://127.0.0.1:{port}{OAUTH_CALLBACK_PATH}");
             let url = build_auth_url(&client_id, &redirect, &challenge, &state);
             open(&url)?;
             let code = accept_code(&listener, &state)?;
@@ -1491,16 +1499,16 @@ mod sync {
             self.cancel.store(true, Ordering::Relaxed);
         }
 
-        /// Blocking Drive sync of the active profile.
+        /// Blocking Drive sync of `profile`.
         ///
         /// `on_progress` is `(files_done, files_total, bytes_done, bytes_total, current_path)`.
         pub fn run(
             &mut self,
             store: &mut ConfigStore,
+            profile: &crate::profile::SyncProfile,
             on_progress: &dyn Fn(i64, i64, i64, i64, &str),
         ) -> Result<(), GoogleDriveError> {
             self.cancel.store(false, Ordering::Relaxed);
-            let profile = store.active_profile().clone();
             let source = profile.expanded_source_path();
             if source.is_empty() {
                 return Err(self.precondition("Source path not configured"));
@@ -1519,7 +1527,7 @@ mod sync {
                 start_time: Some(Utc::now()),
                 ..SyncProgress::new()
             };
-            match self.run_inner(&profile, &source_path, store, on_progress) {
+            match self.run_inner(profile, &source_path, store, on_progress) {
                 Ok(()) => Ok(()),
                 Err(err) => {
                     if matches!(self.progress.state, State::Interrupted)
@@ -1578,7 +1586,7 @@ mod sync {
             self.report(on_progress);
 
             if plan.uploads.is_empty() && plan.deletes.is_empty() {
-                return self.complete(store, on_progress);
+                return self.complete(store, &profile_name, &profile.id.to_string(), on_progress);
             }
 
             let by_path: HashMap<&str, &LocalSnapshot> = local_files
@@ -1623,7 +1631,7 @@ mod sync {
                 self.report(on_progress);
             }
 
-            self.complete(store, on_progress)
+            self.complete(store, &profile_name, &profile.id.to_string(), on_progress)
         }
 
         fn scan_remote(
@@ -1709,6 +1717,8 @@ mod sync {
         fn complete(
             &mut self,
             store: &mut ConfigStore,
+            profile_name: &str,
+            sync_profile_id: &str,
             on_progress: &dyn Fn(i64, i64, i64, i64, &str),
         ) -> Result<(), GoogleDriveError> {
             self.progress.end_time = Some(Utc::now());
@@ -1721,7 +1731,8 @@ mod sync {
                 self.progress.duration().unwrap_or(0.0),
                 true,
             );
-            record.profile_name = store.active_profile().name.clone();
+            record.profile_name = profile_name.to_string();
+            record.profile_id = sync_profile_id.to_string();
             store
                 .append_sync_record(record)
                 .map_err(|err| GoogleDriveError::Message(err.to_string()))?;
@@ -1868,9 +1879,9 @@ pub use client::{
     upload_strategy, GoogleDriveClient, GoogleDriveError, GoogleDriveItem, UploadStrategy,
 };
 pub use oauth::{
-    apply_refresh_response, build_auth_url, generate_pkce, open_system_browser,
+    apply_refresh_response, build_auth_url, generate_pkce, oauth_redirect_uri, open_system_browser,
     parse_oauth_callback, parse_token_response, pkce_challenge, GoogleOAuth, GoogleOAuthError,
-    GoogleTokens,
+    GoogleTokens, OAUTH_CALLBACK_PATH,
 };
 pub use sync::{
     path_excluded, plan_drive_sync, scan_local_files, DrivePlan, GoogleDriveSync, LocalSnapshot,

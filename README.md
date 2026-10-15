@@ -6,7 +6,7 @@
 
 **OneDrive for your own hardware — auto-sync the folders you choose to any drive you plug in, the moment it connects.**
 
-[![Download](https://img.shields.io/badge/Download-SyncDrop.zip-2E7DF6?style=for-the-badge)](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop.zip)
+[![Download](https://img.shields.io/badge/Download-latest%20release-2E7DF6?style=for-the-badge)](https://github.com/abhinay-hat/SyncDrop/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1FB6C9.svg?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/macOS-13%2B-555.svg?style=for-the-badge)](#requirements)
 
@@ -30,32 +30,30 @@ Think of it like OneDrive or iCloud Drive — but instead of syncing to a cloud 
 
 ---
 
+## Download
+
+Installers for the current release are on **[GitHub Releases](https://github.com/abhinay-hat/SyncDrop/releases/latest)**.
+
+| Platform | File |
+|----------|------|
+| macOS Apple silicon | [`SyncDrop_0.1.0_aarch64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_aarch64.dmg) |
+| macOS Intel | [`SyncDrop_0.1.0_x64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_x64.dmg) |
+| Windows | [`SyncDrop_0.1.0_x64-setup.exe`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_x64-setup.exe) |
+| Linux AppImage | [`SyncDrop_0.1.0_amd64.AppImage`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_amd64.AppImage) |
+| Linux deb | [`SyncDrop_0.1.0_amd64.deb`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_amd64.deb) |
+| Android | [`SyncDrop-android-v0.1.0.apk`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop-android-v0.1.0.apk) |
+
+macOS also includes `SyncDrop_aarch64.app.tar.gz` and `SyncDrop_x64.app.tar.gz` (the `.app` bundle).
+
+**Install notes**
+
+- **macOS unsigned:** right-click the app → **Open**, or run `xattr -dr com.apple.quarantine` on it.
+- **Windows SmartScreen:** **More info > Run anyway**.
+- **Linux AppImage:** `chmod +x` the file before launching it.
+
 ## Install
 
-### Option A — Download the app (recommended)
-
-1. **[Download `SyncDrop.zip`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop.zip)** from the latest release.
-2. **Unzip** it (double-click) and **drag `SyncDrop.app`** into your `/Applications` folder.
-3. **First launch.** Double-click it. macOS shows *"Apple could not verify SyncDrop is free of malware."* That's expected — the app isn't notarized yet (see [below](#why-the-warning)). To open it:
-
-   **On macOS 15 (Sequoia) and later:**
-   1. Click **Done** on the dialog.
-   2. Open  → **System Settings → Privacy & Security**.
-   3. Scroll down to the message *"SyncDrop was blocked…"* and click **Open Anyway**.
-   4. Authenticate, then click **Open**. Done — you only do this once.
-
-   **On macOS 13–14 (Ventura/Sonoma):** right-click `SyncDrop.app` → **Open** → **Open**.
-
-   **Or, from Terminal (any version):** one command, then just double-click normally:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/SyncDrop.app
-   ```
-4. The **SyncDrop icon appears in your menu bar**. Click it → **Settings** to set up.
-
-<a name="why-the-warning"></a>
-> **Why the warning?** SyncDrop is open-source and code-signed, but not yet *notarized* by Apple — notarization requires a paid Apple Developer account ($99/yr). The build is safe and fully auditable here; you can also [build it yourself](#option-b--build-from-source) in one command. Notarization is on the [roadmap](#roadmap).
-
-### Option B — Build from source
+### Build from source
 
 Requires the Swift toolchain (Xcode or Command Line Tools).
 
@@ -176,24 +174,23 @@ See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
 #### Automated releases (GitHub Actions)
 
-Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
-which builds, packages, and attaches `SyncDrop.zip` to a GitHub Release:
+`make release` prints the tag and push commands. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds desktop installers and the Android debug APK and attaches them to a GitHub Release. `0.x` tags are marked prerelease.
 
 ```bash
-git tag v1.0.1 && git push origin v1.0.1
+make release
+git tag v0.1.0 && git push origin v0.1.0
 ```
 
-If these repo **secrets** are set, the workflow signs with Developer ID and
-notarizes; otherwise it falls back to a clean ad-hoc build (still uploaded):
+If these repo **secrets** are set, macOS builds are signed (and notarized when the Apple ID secrets are present). When they are absent, the build is unsigned:
 
 | Secret | What |
 |--------|------|
-| `APP_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` |
-| `MACOS_CERTIFICATE_P12_BASE64` | Developer ID cert exported as `.p12`, base64-encoded |
-| `MACOS_CERTIFICATE_PASSWORD` | password for that `.p12` |
-| `APP_STORE_CONNECT_KEY_ID` | App Store Connect API key id |
-| `APP_STORE_CONNECT_ISSUER_ID` | issuer id |
-| `APP_STORE_CONNECT_API_KEY_P8` | contents of the `AuthKey_XXXX.p8` |
+| `APPLE_CERTIFICATE` | Developer ID certificate, `.p12` base64-encoded |
+| `APPLE_CERTIFICATE_PASSWORD` | password for that `.p12` |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_PASSWORD` | app-specific password |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
 
 ## License
 

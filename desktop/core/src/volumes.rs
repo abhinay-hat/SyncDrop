@@ -3,6 +3,7 @@
 //! ponytail: polls `sysinfo` every 2s instead of DiskArbitration / WM_DEVICECHANGE / udev.
 //! Upgrade if a 2s connect delay is too slow.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,6 +11,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
+use uuid::Uuid;
 
 use crate::profile::SyncProfile;
 
@@ -30,26 +33,33 @@ pub fn poll_delay(since_last: Duration, poll_interval: Duration, wake_gap: Durat
 pub struct MountedDisk {
     pub name: String,
     pub mount_point: PathBuf,
+    pub available_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VolumeEvent {
-    Connected(PathBuf),
-    Disconnected,
+    Connected {
+        profile_id: Uuid,
+        path: PathBuf,
+        free_bytes: Option<u64>,
+    },
+    Disconnected {
+        profile_id: Uuid,
+    },
 }
 
-/// Snapshot the monitor thread reads each poll. Update it in place when the active profile changes.
+/// Snapshot the monitor thread reads each poll. Every profile is watched, not only the active one.
 #[derive(Debug, Clone)]
 pub struct WatchState {
-    pub profile: SyncProfile,
-    /// Phase 4 fills this in. Cloud profiles stay disconnected until it is true.
+    pub profiles: Vec<SyncProfile>,
+    /// Cloud profiles stay disconnected until this is true.
     pub google_signed_in: bool,
 }
 
 impl WatchState {
     pub fn new(profile: SyncProfile) -> Self {
         Self {
-            profile,
+            profiles: vec![profile],
             google_signed_in: false,
         }
     }
@@ -72,7 +82,7 @@ pub fn disk_matches(ssd_name: &str, disk: &MountedDisk) -> bool {
     mount_basename(&disk.mount_point) == Some(ssd_name)
 }
 
-/// Where the active profile is "connected", if anywhere.
+/// Where a profile is "connected", if anywhere.
 ///
 /// Order matches `VolumeMonitor.checkCurrentlyMountedVolumes`: Google Drive cloud
 /// (signed-in only), then an existing cloud-storage destination directory, then a
@@ -93,12 +103,33 @@ pub fn resolve_mount(
     disks.iter().find(|d| disk_matches(&profile.ssd_name, d)).map(|d| d.mount_point.clone())
 }
 
-/// Event to emit when the resolved mount changes. `None` means nothing new happened.
-pub fn connection_event(previous: Option<&Path>, next: Option<&Path>) -> Option<VolumeEvent> {
+/// Free space on the disk mounted at `mount`, when that disk is in the snapshot.
+pub fn free_bytes_at(disks: &[MountedDisk], mount: &Path) -> Option<u64> {
+    disks
+        .iter()
+        .find(|disk| disk.mount_point == mount)
+        .map(|disk| disk.available_bytes)
+}
+
+/// Event to emit when one profile's resolved mount changes. `None` means nothing new happened.
+pub fn mount_transition(
+    profile_id: Uuid,
+    previous: Option<&Path>,
+    next: Option<&Path>,
+    free_bytes: Option<u64>,
+) -> Option<VolumeEvent> {
     match (previous, next) {
-        (None, Some(path)) => Some(VolumeEvent::Connected(path.to_path_buf())),
-        (Some(_), None) => Some(VolumeEvent::Disconnected),
-        (Some(prev), Some(next)) if prev != next => Some(VolumeEvent::Connected(next.to_path_buf())),
+        (None, Some(path)) => Some(VolumeEvent::Connected {
+            profile_id,
+            path: path.to_path_buf(),
+            free_bytes,
+        }),
+        (Some(_), None) => Some(VolumeEvent::Disconnected { profile_id }),
+        (Some(prev), Some(next)) if prev != next => Some(VolumeEvent::Connected {
+            profile_id,
+            path: next.to_path_buf(),
+            free_bytes,
+        }),
         _ => None,
     }
 }
@@ -111,6 +142,7 @@ pub fn list_mounted_disks() -> Vec<MountedDisk> {
         .map(|disk| MountedDisk {
             name: disk.name().to_string_lossy().into_owned(),
             mount_point: disk.mount_point().to_path_buf(),
+            available_bytes: disk.available_space(),
         })
         .collect()
 }
@@ -279,7 +311,7 @@ fn spawn_inner(
     let thread = thread::Builder::new()
         .name("syncdrop-volumes".into())
         .spawn(move || {
-            let mut previous: Option<PathBuf> = None;
+            let mut previous: HashMap<Uuid, PathBuf> = HashMap::new();
             // First iteration is already "late", so startup scans immediately (same as Swift's start).
             let mut last_poll = std::time::Instant::now()
                 .checked_sub(timing.wake_gap + Duration::from_secs(1))
@@ -295,26 +327,69 @@ fn spawn_inner(
                 last_poll = std::time::Instant::now();
                 let snapshot = lock(&state).clone();
                 let mounted = disks.list();
-                let dest = snapshot.profile.expanded_dest_path();
-                let dest_is_directory = !dest.is_empty() && Path::new(&dest).is_dir();
-                let next = resolve_mount(
-                    &snapshot.profile,
-                    snapshot.google_signed_in,
-                    dest_is_directory,
-                    &mounted,
-                );
-                if let Some(event) = connection_event(previous.as_deref(), next.as_deref()) {
-                    match &event {
-                        VolumeEvent::Connected(path) => {
-                            log::info!("volume connected at {}", path.display());
+                let mut seen = HashSet::new();
+                let mut stopped = false;
+                for profile in &snapshot.profiles {
+                    seen.insert(profile.id);
+                    let dest = profile.expanded_dest_path();
+                    let dest_is_directory = !dest.is_empty() && Path::new(&dest).is_dir();
+                    let next = resolve_mount(
+                        profile,
+                        snapshot.google_signed_in,
+                        dest_is_directory,
+                        &mounted,
+                    );
+                    let free = next.as_deref().and_then(|path| free_bytes_at(&mounted, path));
+                    if let Some(event) = mount_transition(
+                        profile.id,
+                        previous.get(&profile.id).map(PathBuf::as_path),
+                        next.as_deref(),
+                        free,
+                    ) {
+                        match &event {
+                            VolumeEvent::Connected { path, .. } => {
+                                log::info!("volume connected at {}", path.display());
+                            }
+                            VolumeEvent::Disconnected { profile_id } => {
+                                log::info!("volume disconnected profile={profile_id}");
+                            }
                         }
-                        VolumeEvent::Disconnected => log::info!("volume disconnected"),
+                        if tx.send(event).is_err() {
+                            stopped = true;
+                            break;
+                        }
                     }
-                    if tx.send(event).is_err() {
+                    match next {
+                        Some(path) => {
+                            previous.insert(profile.id, path);
+                        }
+                        None => {
+                            previous.remove(&profile.id);
+                        }
+                    }
+                }
+                if stopped {
+                    break;
+                }
+                let stale: Vec<Uuid> = previous
+                    .keys()
+                    .copied()
+                    .filter(|id| !seen.contains(id))
+                    .collect();
+                for profile_id in stale {
+                    previous.remove(&profile_id);
+                    log::info!("volume disconnected profile={profile_id}");
+                    if tx
+                        .send(VolumeEvent::Disconnected { profile_id })
+                        .is_err()
+                    {
+                        stopped = true;
                         break;
                     }
                 }
-                previous = next;
+                if stopped {
+                    break;
+                }
             }
         })
         .expect("spawn volume monitor thread");
@@ -349,6 +424,7 @@ mod tests {
         MountedDisk {
             name: name.to_string(),
             mount_point: PathBuf::from(mount),
+            available_bytes: 0,
         }
     }
 
@@ -413,23 +489,46 @@ mod tests {
     }
 
     #[test]
-    fn connection_event_only_on_change() {
+    fn mount_transition_is_per_profile_and_only_on_change() {
         let mount = Path::new("/Volumes/Extreme Pro");
+        let alpha = Uuid::new_v4();
+        let beta = Uuid::new_v4();
         assert_eq!(
-            connection_event(None, Some(mount)),
-            Some(VolumeEvent::Connected(mount.to_path_buf()))
+            mount_transition(alpha, None, Some(mount), Some(10)),
+            Some(VolumeEvent::Connected {
+                profile_id: alpha,
+                path: mount.to_path_buf(),
+                free_bytes: Some(10),
+            })
         );
         assert_eq!(
-            connection_event(Some(mount), None),
-            Some(VolumeEvent::Disconnected)
+            mount_transition(beta, Some(mount), None, None),
+            Some(VolumeEvent::Disconnected { profile_id: beta })
         );
-        assert_eq!(connection_event(Some(mount), Some(mount)), None);
-        assert_eq!(connection_event(None, None), None);
+        assert_eq!(mount_transition(alpha, Some(mount), Some(mount), Some(10)), None);
+        assert_eq!(mount_transition(alpha, None, None, None), None);
         let other = Path::new("/Volumes/Other");
         assert_eq!(
-            connection_event(Some(mount), Some(other)),
-            Some(VolumeEvent::Connected(other.to_path_buf()))
+            mount_transition(alpha, Some(mount), Some(other), None),
+            Some(VolumeEvent::Connected {
+                profile_id: alpha,
+                path: other.to_path_buf(),
+                free_bytes: None,
+            })
         );
+        assert_ne!(alpha, beta);
+    }
+
+    #[test]
+    fn free_bytes_follow_the_matched_mount() {
+        let mut extreme = disk("Extreme Pro", "/Volumes/Extreme Pro");
+        extreme.available_bytes = 42;
+        let disks = vec![extreme, disk("Other", "/Volumes/Other")];
+        assert_eq!(
+            free_bytes_at(&disks, Path::new("/Volumes/Extreme Pro")),
+            Some(42)
+        );
+        assert_eq!(free_bytes_at(&disks, Path::new("/missing")), None);
     }
 
     #[test]
@@ -487,7 +586,9 @@ mod tests {
 
     #[test]
     fn monitor_emits_connect_then_disconnect() {
-        let state = Arc::new(Mutex::new(WatchState::new(profile_named("Extreme Pro"))));
+        let profile = profile_named("Extreme Pro");
+        let id = profile.id;
+        let state = Arc::new(Mutex::new(WatchState::new(profile)));
         let scripted = ScriptedDisks {
             steps: Mutex::new(vec![
                 vec![],
@@ -503,10 +604,67 @@ mod tests {
         let first = rx.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(
             first,
-            VolumeEvent::Connected(PathBuf::from("/Volumes/Extreme Pro"))
+            VolumeEvent::Connected {
+                profile_id: id,
+                path: PathBuf::from("/Volumes/Extreme Pro"),
+                free_bytes: Some(0),
+            }
         );
         let second = rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert_eq!(second, VolumeEvent::Disconnected);
+        assert_eq!(second, VolumeEvent::Disconnected { profile_id: id });
+        drop(monitor);
+    }
+
+    #[test]
+    fn monitor_tracks_each_profile_on_its_own() {
+        let alpha = profile_named("Alpha");
+        let beta = profile_named("Beta");
+        let id_a = alpha.id;
+        let id_b = beta.id;
+        let state = Arc::new(Mutex::new(WatchState {
+            profiles: vec![alpha, beta],
+            google_signed_in: false,
+        }));
+        let scripted = ScriptedDisks {
+            steps: Mutex::new(vec![
+                vec![],
+                vec![disk("Alpha", "/Volumes/Alpha")],
+                vec![
+                    disk("Alpha", "/Volumes/Alpha"),
+                    disk("Beta", "/Volumes/Beta"),
+                ],
+                vec![],
+            ]),
+        };
+        let timing = MonitorTiming {
+            poll: Duration::from_millis(40),
+            wake_gap: Duration::from_secs(10),
+        };
+        let (monitor, rx) = spawn_inner(state, Box::new(scripted), timing);
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            VolumeEvent::Connected {
+                profile_id: id_a,
+                path: PathBuf::from("/Volumes/Alpha"),
+                free_bytes: Some(0),
+            }
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            VolumeEvent::Connected {
+                profile_id: id_b,
+                path: PathBuf::from("/Volumes/Beta"),
+                free_bytes: Some(0),
+            }
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            VolumeEvent::Disconnected { profile_id: id_a }
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            VolumeEvent::Disconnected { profile_id: id_b }
+        );
         drop(monitor);
     }
 }

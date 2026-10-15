@@ -1,6 +1,7 @@
 //! Tauri 2 menu-bar shell. Sync work lives in `syncdrop-core`; this crate only
 //! wires the tray, windows, and OS plugins.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -11,17 +12,18 @@ use chrono::Utc;
 use serde::Serialize;
 use syncdrop_core::config::ConfigStore;
 use syncdrop_core::engine::{self, EngineError};
-use syncdrop_core::gdrive::{GoogleDriveError, GoogleDriveSync, GoogleOAuth};
+use syncdrop_core::gdrive::{
+    oauth_redirect_uri, GoogleDriveError, GoogleDriveSync, GoogleOAuth,
+};
 use syncdrop_core::nas::{self, AutoMountHandle};
 use syncdrop_core::profile::{ProfileError, SyncProfile};
 use syncdrop_core::progress::{State, SyncProgress};
 use syncdrop_core::volumes::{self, VolumeEvent, VolumeMonitor, WatchState};
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
-use tauri::{
-    ActivationPolicy, App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
-};
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
+use tauri::{App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -98,11 +100,13 @@ struct HistoryItem {
     id: String,
     date: String,
     profile_name: String,
+    profile_id: String,
     file_count: i64,
     size: String,
     duration: String,
     succeeded: bool,
     at: i64,
+    error: Option<String>,
 }
 
 #[derive(Clone)]
@@ -129,11 +133,13 @@ impl CachedConfig {
                     id: record.id.to_string(),
                     date: record.formatted_date(),
                     profile_name: record.profile_name.clone(),
+                    profile_id: record.profile_id.clone(),
                     file_count: record.file_count,
                     size: record.formatted_size(),
                     duration: record.formatted_duration(),
                     succeeded: record.succeeded,
                     at: record.date.timestamp(),
+                    error: record.error.clone(),
                 })
                 .collect(),
             google_client_id: store.google_client_id().to_string(),
@@ -201,10 +207,27 @@ fn progress_rates(progress: &SyncProgress) -> (f64, Option<f64>) {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DryRunView {
+    profile_id: String,
     copies: Vec<String>,
     updates: Vec<String>,
     deletes: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileLive {
+    id: Uuid,
+    connected: bool,
+    mount: String,
+    free_bytes: Option<u64>,
+    ejectable: bool,
+}
+
+#[derive(Clone)]
+struct MountInfo {
+    path: PathBuf,
+    free_bytes: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -223,9 +246,11 @@ struct UiState {
     connected: bool,
     mount: String,
     syncing: bool,
+    syncing_profile_id: Option<Uuid>,
     previewing: bool,
     progress: ProgressView,
     dry_run: Option<DryRunView>,
+    profiles_live: Vec<ProfileLive>,
 }
 
 #[derive(Clone, Serialize)]
@@ -243,8 +268,9 @@ struct AppState {
     watch: Arc<Mutex<WatchState>>,
     monitor: Mutex<Option<VolumeMonitor>>,
     nas: Mutex<Option<AutoMountHandle>>,
-    nas_profile: Arc<Mutex<SyncProfile>>,
-    mount: Mutex<Option<PathBuf>>,
+    nas_profiles: Arc<Mutex<Vec<SyncProfile>>>,
+    mounts: Mutex<HashMap<Uuid, MountInfo>>,
+    sync_profile: Mutex<Option<Uuid>>,
     progress: Mutex<SyncProgress>,
     cancel: Mutex<Option<Arc<AtomicBool>>>,
     syncing: AtomicBool,
@@ -260,16 +286,20 @@ struct AppState {
 impl AppState {
     fn open() -> Result<Self, String> {
         let store = ConfigStore::new().map_err(|e| e.to_string())?;
-        let profile = store.active_profile().clone();
-        let watch = Arc::new(Mutex::new(WatchState::new(profile.clone())));
+        let profiles = store.profiles().to_vec();
+        let watch = Arc::new(Mutex::new(WatchState {
+            profiles: profiles.clone(),
+            google_signed_in: false,
+        }));
         Ok(Self {
             cache: Mutex::new(CachedConfig::from_store(&store)),
             store: Mutex::new(store),
             watch,
             monitor: Mutex::new(None),
             nas: Mutex::new(None),
-            nas_profile: Arc::new(Mutex::new(profile)),
-            mount: Mutex::new(None),
+            nas_profiles: Arc::new(Mutex::new(profiles)),
+            mounts: Mutex::new(HashMap::new()),
+            sync_profile: Mutex::new(None),
             progress: Mutex::new(SyncProgress::new()),
             cancel: Mutex::new(None),
             syncing: AtomicBool::new(false),
@@ -337,7 +367,9 @@ pub fn run() {
             close_window,
             prefer_home_path,
             get_recent_logs,
-            open_logs_folder
+            open_logs_folder,
+            app_version,
+            google_redirect_uri
         ])
         .run(tauri::generate_context!())
     {
@@ -358,7 +390,7 @@ fn wire(app: &mut App) -> Result<(), String> {
 
     let (monitor, rx) = VolumeMonitor::spawn(Arc::clone(&state.watch));
     *lock(&state.monitor) = Some(monitor);
-    *lock(&state.nas) = Some(AutoMountHandle::spawn(Arc::clone(&state.nas_profile)));
+    *lock(&state.nas) = Some(AutoMountHandle::spawn_profiles(Arc::clone(&state.nas_profiles)));
 
     spawn_volume_loop(handle.clone(), rx);
     build_tray(&handle)?;
@@ -389,14 +421,27 @@ fn refresh_google(state: &AppState) {
 }
 
 fn sync_targets(state: &AppState) {
-    let profile = lock(&state.store).active_profile().clone();
+    let profiles = lock(&state.store).profiles().to_vec();
     let signed = lock(&state.google).signed_in;
     {
         let mut watch = lock(&state.watch);
-        watch.profile = profile.clone();
+        watch.profiles = profiles.clone();
         watch.google_signed_in = signed;
     }
-    *lock(&state.nas_profile) = profile;
+    *lock(&state.nas_profiles) = profiles;
+}
+
+fn mount_info(state: &AppState, id: Uuid) -> Option<MountInfo> {
+    lock(&state.mounts).get(&id).cloned()
+}
+
+fn profile_by_id(state: &AppState, id: Uuid) -> Result<SyncProfile, String> {
+    lock(&state.store)
+        .profiles()
+        .iter()
+        .find(|profile| profile.id == id)
+        .cloned()
+        .ok_or_else(|| "That profile is no longer here.".to_string())
 }
 
 fn remember(state: &AppState) -> CachedConfig {
@@ -431,15 +476,21 @@ fn publish_config(state: &AppState) {
 fn build_tray(app: &AppHandle) -> Result<(), String> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
     let menu = Menu::with_items(app, &[&quit]).map_err(|e| e.to_string())?;
+    // Template tray is black+alpha so macOS tints it. Other desktops use the
+    // colored app icon, which stays visible on light and dark taskbars.
+    #[cfg(target_os = "macos")]
     let icon = tauri::include_image!("icons/tray.png");
-    let tray = TrayIconBuilder::with_id("tray")
+    #[cfg(not(target_os = "macos"))]
+    let icon = tauri::include_image!("icons/32x32.png");
+    let builder = TrayIconBuilder::with_id("tray")
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .tooltip("idle")
-        .on_menu_event(|app, event| handle_menu(app, &event.id().0))
-        .build(app)
-        .map_err(|e| e.to_string())?;
+        .on_menu_event(|app, event| handle_menu(app, &event.id().0));
+    #[cfg(target_os = "macos")]
+    let builder = builder.icon_as_template(true);
+    let tray = builder.build(app).map_err(|e| e.to_string())?;
     *lock(&app.state::<AppState>().tray) = Some(tray);
     install_menu(app)
 }
@@ -447,9 +498,9 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
 fn install_menu(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let cfg = config_snapshot(&state);
-    let mount = lock(&state.mount).clone();
+    let mount = mount_info(&state, cfg.active_profile_id);
     let connected = mount.is_some();
-    let ejectable = mount.as_ref().is_some_and(|path| !is_virtual_mount(path));
+    let ejectable = mount.as_ref().is_some_and(|info| !is_virtual_mount(&info.path));
     let busy = state.syncing.load(Ordering::SeqCst);
     let progress = lock(&state.progress).clone();
     let running = matches!(progress.state, State::Running);
@@ -565,13 +616,20 @@ fn spawn_tray_pump(app: AppHandle) {
 fn handle_menu(app: &AppHandle, id: &str) {
     match id {
         "sync-now" => {
-            let _ = start_sync(app);
+            let profile = lock(&app.state::<AppState>().store).active_profile().clone();
+            if profile.mirror_mode {
+                let _ = start_dry_run(app, profile.id);
+            } else {
+                let _ = start_sync(app, profile.id);
+            }
         }
         "dry-run" => {
-            let _ = start_dry_run(app);
+            let id = lock(&app.state::<AppState>().store).active_profile_id();
+            let _ = start_dry_run(app, id);
         }
         "eject" => {
-            let _ = eject_mounted(app);
+            let id = lock(&app.state::<AppState>().store).active_profile_id();
+            let _ = eject_mounted(app, id);
         }
         "settings" => show_settings(app),
         "launch-login" => {
@@ -611,27 +669,45 @@ fn spawn_volume_loop(app: AppHandle, rx: Receiver<VolumeEvent>) {
 fn on_volume(app: &AppHandle, event: VolumeEvent) {
     let state = app.state::<AppState>();
     match event {
-        VolumeEvent::Connected(path) => {
-            *lock(&state.mount) = Some(path);
-            let profile = lock(&state.store).active_profile().clone();
-            if profile.dest_path.trim().is_empty() {
-                show_settings(app);
-            } else {
-                if profile.auto_sync {
-                    let _ = start_sync(app);
+        VolumeEvent::Connected {
+            profile_id,
+            path,
+            free_bytes,
+        } => {
+            lock(&state.mounts).insert(
+                profile_id,
+                MountInfo {
+                    path: path.clone(),
+                    free_bytes,
+                },
+            );
+            let profile = lock(&state.store)
+                .profiles()
+                .iter()
+                .find(|profile| profile.id == profile_id)
+                .cloned();
+            if let Some(profile) = profile {
+                let needs_folder = profile.dest_path.trim().is_empty() && !profile.is_google_drive_cloud();
+                if needs_folder {
+                    show_settings(app);
+                } else if profile.auto_sync {
+                    let _ = start_sync(app, profile.id);
+                    show_popup(app);
                 }
-                show_popup(app);
             }
         }
-        VolumeEvent::Disconnected => {
-            *lock(&state.mount) = None;
-            state.user_cancel.store(false, Ordering::SeqCst);
-            if let Some(flag) = lock(&state.cancel).as_ref() {
-                flag.store(true, Ordering::SeqCst);
+        VolumeEvent::Disconnected { profile_id } => {
+            lock(&state.mounts).remove(&profile_id);
+            if *lock(&state.sync_profile) == Some(profile_id) {
+                state.user_cancel.store(false, Ordering::SeqCst);
+                if let Some(flag) = lock(&state.cancel).as_ref() {
+                    flag.store(true, Ordering::SeqCst);
+                }
             }
         }
     }
     let _ = install_menu(app);
+    emit_ui(app);
 }
 
 fn show_settings(app: &AppHandle) {
@@ -690,6 +766,10 @@ fn emit_progress(app: &AppHandle, progress: &SyncProgress) {
     let _ = app.emit("sync-progress", progress_view(progress));
 }
 
+fn emit_ui(app: &AppHandle) {
+    let _ = app.emit("ui-state", ());
+}
+
 fn report_files(app: &AppHandle, done: i64, total: i64, bytes_done: i64, bytes_total: i64, path: &str) {
     let state = app.state::<AppState>();
     let mut progress = lock(&state.progress).clone();
@@ -706,13 +786,13 @@ fn report_files(app: &AppHandle, done: i64, total: i64, bytes_done: i64, bytes_t
     emit_progress(app, &progress);
 }
 
-fn start_sync(app: &AppHandle) -> Result<(), String> {
+fn start_sync(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
     let state = app.state::<AppState>();
     if state.syncing.load(Ordering::SeqCst) {
         show_popup(app);
         return Ok(());
     }
-    let profile = lock(&state.store).active_profile().clone();
+    let profile = profile_by_id(&state, profile_id)?;
     if let Err(issues) = profile.validate() {
         let message = issues
             .first()
@@ -727,10 +807,11 @@ fn start_sync(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let notify = lock(&state.store).notify_on_complete();
-    let mount = lock(&state.mount).clone();
+    let mount = mount_info(&state, profile.id).map(|info| info.path);
     log::info!("sync started profile={}", profile.name);
     let cancel = Arc::new(AtomicBool::new(false));
     *lock(&state.cancel) = Some(Arc::clone(&cancel));
+    *lock(&state.sync_profile) = Some(profile.id);
     state.user_cancel.store(false, Ordering::SeqCst);
     state.previewing.store(false, Ordering::SeqCst);
     *lock(&state.dry_run) = None;
@@ -744,19 +825,31 @@ fn start_sync(app: &AppHandle) -> Result<(), String> {
     let app2 = app.clone();
     let cloud = profile.is_google_drive_cloud();
     let auto_eject = profile.auto_eject;
+    let profile_name = profile.name.clone();
+    let finished_id = profile.id;
     if std::thread::Builder::new()
         .name("syncdrop-sync".into())
         .spawn(move || {
             let end = if cloud {
-                run_drive(&app2, &cancel)
+                run_drive(&app2, &profile, &cancel)
             } else {
                 run_local(&app2, &profile, &cancel)
             };
-            finish_sync(&app2, end, notify, auto_eject, mount, cloud);
+            finish_sync(
+                &app2,
+                end,
+                notify,
+                auto_eject,
+                mount,
+                cloud,
+                finished_id,
+                profile_name,
+            );
         })
         .is_err()
     {
         state.syncing.store(false, Ordering::SeqCst);
+        *lock(&state.sync_profile) = None;
         return Err("Could not start sync.".into());
     }
     show_popup(app);
@@ -781,6 +874,7 @@ fn run_local(app: &AppHandle, profile: &SyncProfile, cancel: &AtomicBool) -> Syn
     ) {
         Ok(mut record) => {
             record.profile_name = profile.name.clone();
+            record.profile_id = profile.id.to_string();
             if let Err(err) = lock(&app.state::<AppState>().store).append_sync_record(record) {
                 SyncEnd::Err(err.to_string())
             } else {
@@ -792,7 +886,7 @@ fn run_local(app: &AppHandle, profile: &SyncProfile, cancel: &AtomicBool) -> Syn
     }
 }
 
-fn run_drive(app: &AppHandle, early_cancel: &AtomicBool) -> SyncEnd {
+fn run_drive(app: &AppHandle, profile: &SyncProfile, early_cancel: &AtomicBool) -> SyncEnd {
     let state = app.state::<AppState>();
     let mut engine = {
         let store = lock(&state.store);
@@ -811,7 +905,7 @@ fn run_drive(app: &AppHandle, early_cancel: &AtomicBool) -> SyncEnd {
     }
     *lock(&state.cancel) = Some(flag);
     let mut store = lock(&state.store);
-    match engine.run(&mut store, &|done, total, bytes_done, bytes_total, path| {
+    match engine.run(&mut store, profile, &|done, total, bytes_done, bytes_total, path| {
         report_files(app, done, total, bytes_done, bytes_total, path);
     }) {
         Ok(()) => SyncEnd::Ok,
@@ -827,9 +921,12 @@ fn finish_sync(
     auto_eject: bool,
     mount: Option<PathBuf>,
     cloud: bool,
+    profile_id: Uuid,
+    profile_name: String,
 ) {
     let state = app.state::<AppState>();
     state.syncing.store(false, Ordering::SeqCst);
+    *lock(&state.sync_profile) = None;
     let files = lock(&state.progress).files_done;
     match end {
         SyncEnd::Ok => {
@@ -856,7 +953,7 @@ fn finish_sync(
                     if volumes::eject(&path).is_err() {
                         notify_msg(app, "Could not eject — check Finder");
                     } else {
-                        *lock(&state.mount) = None;
+                        lock(&state.mounts).remove(&profile_id);
                     }
                 }
             }
@@ -874,10 +971,25 @@ fn finish_sync(
         }
         SyncEnd::Err(message) => {
             log::error!("sync failed: {message}");
-            {
+            let duration = {
                 let mut progress = lock(&state.progress);
                 progress.state = State::Error(message.clone());
                 progress.end_time = Some(Utc::now());
+                progress.duration().unwrap_or(0.0)
+            };
+            let bytes = lock(&state.progress).bytes_done;
+            let mut record = syncdrop_core::progress::SyncRecord::new(
+                Utc::now(),
+                files,
+                bytes,
+                duration,
+                false,
+            );
+            record.profile_name = profile_name;
+            record.profile_id = profile_id.to_string();
+            record.error = Some(message.clone());
+            if let Err(err) = lock(&state.store).append_sync_record(record) {
+                log::error!("could not store the failed sync: {err}");
             }
             notify_msg(app, &message);
         }
@@ -890,17 +1002,17 @@ fn finish_sync(
     emit_progress(app, &progress);
 }
 
-fn start_dry_run(app: &AppHandle) -> Result<(), String> {
+fn start_dry_run(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
     let state = app.state::<AppState>();
     if state.syncing.load(Ordering::SeqCst) {
         return Err("A sync is already running.".into());
     }
-    let profile = lock(&state.store).active_profile().clone();
+    let profile = profile_by_id(&state, profile_id)?;
     if let Err(issues) = profile.validate() {
         show_settings(app);
         return Err(issues_json(issues));
     }
-    let connected = lock(&state.mount).is_some();
+    let connected = mount_info(&state, profile.id).is_some();
     if !connected && !profile.is_google_drive_cloud() {
         notify_msg(app, "Connect the destination volume first.");
         return Err("Connect the destination volume first.".into());
@@ -910,20 +1022,24 @@ fn start_dry_run(app: &AppHandle) -> Result<(), String> {
     }
     log::info!("dry run started profile={}", profile.name);
     state.previewing.store(true, Ordering::SeqCst);
+    *lock(&state.sync_profile) = Some(profile.id);
     *lock(&state.dry_run) = None;
     show_popup(app);
     let app2 = app.clone();
+    let profile_key = profile.id.to_string();
     if std::thread::Builder::new()
         .name("syncdrop-dry-run".into())
         .spawn(move || {
             let view = match dry_plan(&profile) {
                 Ok(plan) => DryRunView {
+                    profile_id: profile_key,
                     copies: plan.copies,
                     updates: plan.updates,
                     deletes: plan.deletes,
                     error: None,
                 },
                 Err(err) => DryRunView {
+                    profile_id: profile_key,
                     copies: Vec::new(),
                     updates: Vec::new(),
                     deletes: Vec::new(),
@@ -941,6 +1057,7 @@ fn start_dry_run(app: &AppHandle) -> Result<(), String> {
             *lock(&state.dry_run) = Some(view.clone());
             state.previewing.store(false, Ordering::SeqCst);
             state.syncing.store(false, Ordering::SeqCst);
+            *lock(&state.sync_profile) = None;
             state.menu_dirty.store(true, Ordering::SeqCst);
             let _ = app2.emit("dry-run", &view);
         })
@@ -948,6 +1065,7 @@ fn start_dry_run(app: &AppHandle) -> Result<(), String> {
     {
         state.syncing.store(false, Ordering::SeqCst);
         state.previewing.store(false, Ordering::SeqCst);
+        *lock(&state.sync_profile) = None;
         return Err("Could not start dry run.".into());
     }
     Ok(())
@@ -964,16 +1082,16 @@ fn dry_plan(profile: &SyncProfile) -> Result<syncdrop_core::engine::Plan, String
     engine::dry_run(profile, &dest).map_err(|err| err.to_string())
 }
 
-fn eject_mounted(app: &AppHandle) -> Result<(), String> {
+fn eject_mounted(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let path = lock(&state.mount)
-        .clone()
+    let path = mount_info(&state, profile_id)
+        .map(|info| info.path)
         .ok_or_else(|| "No volume is connected.".to_string())?;
     if is_virtual_mount(&path) {
         return Err("This destination is not a removable volume.".into());
     }
     volumes::eject(&path).map_err(|err| err.to_string())?;
-    *lock(&state.mount) = None;
+    lock(&state.mounts).remove(&profile_id);
     state.menu_dirty.store(true, Ordering::SeqCst);
     Ok(())
 }
@@ -1005,8 +1123,27 @@ fn parse_id(id: String) -> Result<Uuid, String> {
 fn ui_state(state: &AppState) -> UiState {
     let cfg = config_snapshot(state);
     let google = lock(&state.google);
-    let mount = lock(&state.mount).clone();
+    let mounts = lock(&state.mounts).clone();
     let progress = lock(&state.progress).clone();
+    let active = mounts.get(&cfg.active_profile_id);
+    let profiles_live = cfg
+        .profiles
+        .iter()
+        .map(|profile| {
+            let info = mounts.get(&profile.id);
+            let mount = info
+                .map(|info| info.path.display().to_string())
+                .unwrap_or_default();
+            let virtual_mount = mount.starts_with("gdrive:");
+            ProfileLive {
+                id: profile.id,
+                connected: info.is_some(),
+                mount: mount.clone(),
+                free_bytes: info.and_then(|info| info.free_bytes),
+                ejectable: info.is_some() && !virtual_mount,
+            }
+        })
+        .collect();
     UiState {
         profiles: cfg.profiles,
         active_profile_id: cfg.active_profile_id,
@@ -1018,12 +1155,16 @@ fn ui_state(state: &AppState) -> UiState {
         google_email: google.email.clone(),
         google_folder: google.folder.clone(),
         google_has_secret: google.has_secret,
-        connected: mount.is_some(),
-        mount: mount.map(|path| path.display().to_string()).unwrap_or_default(),
+        connected: active.is_some(),
+        mount: active
+            .map(|info| info.path.display().to_string())
+            .unwrap_or_default(),
         syncing: state.syncing.load(Ordering::SeqCst),
+        syncing_profile_id: *lock(&state.sync_profile),
         previewing: state.previewing.load(Ordering::SeqCst),
         progress: progress_view(&progress),
         dry_run: lock(&state.dry_run).clone(),
+        profiles_live,
     }
 }
 
@@ -1051,20 +1192,19 @@ fn save_profile(app: AppHandle, profile: SyncProfile) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn add_profile(app: AppHandle, name: String) -> Result<(), String> {
+fn add_profile(app: AppHandle, name: String) -> Result<String, String> {
     let state = app.state::<AppState>();
-    {
+    let id = {
         let mut store = lock(&state.store);
         store.add_profile(name).map_err(|err| err.to_string())?;
-        let id = store
+        store
             .profiles()
             .last()
             .map(|profile| profile.id)
-            .ok_or_else(|| "profile was not added".to_string())?;
-        store.set_active_profile_id(id).map_err(|err| err.to_string())?;
-    }
+            .ok_or_else(|| "profile was not added".to_string())?
+    };
     publish_config(&state);
-    Ok(())
+    Ok(id.to_string())
 }
 
 #[tauri::command]
@@ -1093,9 +1233,8 @@ fn set_launch_at_login(app: AppHandle, value: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_nas_password(app: AppHandle, password: String) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let id = lock(&state.store).active_profile_id();
+fn set_nas_password(profile_id: String, password: String) -> Result<(), String> {
+    let id = parse_id(profile_id)?;
     if password.trim().is_empty() {
         nas::delete_password(id).map_err(|err| err.to_string())?;
     } else {
@@ -1105,9 +1244,8 @@ fn set_nas_password(app: AppHandle, password: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn delete_nas_password(app: AppHandle) -> Result<(), String> {
-    let id = lock(&app.state::<AppState>().store).active_profile_id();
-    nas::delete_password(id).map_err(|err| err.to_string())
+fn delete_nas_password(profile_id: String) -> Result<(), String> {
+    nas::delete_password(parse_id(profile_id)?).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -1205,13 +1343,19 @@ fn google_sign_out(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn sync_now(app: AppHandle) -> Result<(), String> {
-    start_sync(&app)
+fn sync_now(app: AppHandle, profile_id: String, confirmed: bool) -> Result<(), String> {
+    let id = parse_id(profile_id)?;
+    let mirror = profile_by_id(&app.state::<AppState>(), id)?.mirror_mode;
+    if mirror && !confirmed {
+        start_dry_run(&app, id)
+    } else {
+        start_sync(&app, id)
+    }
 }
 
 #[tauri::command]
-fn dry_run(app: AppHandle) -> Result<(), String> {
-    start_dry_run(&app)
+fn dry_run(app: AppHandle, profile_id: String) -> Result<(), String> {
+    start_dry_run(&app, parse_id(profile_id)?)
 }
 
 #[tauri::command]
@@ -1223,8 +1367,8 @@ fn cancel_sync(state: tauri::State<AppState>) {
 }
 
 #[tauri::command]
-fn eject(app: AppHandle) -> Result<(), String> {
-    eject_mounted(&app)
+fn eject(app: AppHandle, profile_id: String) -> Result<(), String> {
+    eject_mounted(&app, parse_id(profile_id)?)
 }
 
 #[tauri::command]
@@ -1275,6 +1419,16 @@ fn open_logs_folder(app: AppHandle) -> Result<(), String> {
     app.opener()
         .open_path(dir.to_string_lossy().as_ref(), None::<&str>)
         .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+fn google_redirect_uri() -> String {
+    oauth_redirect_uri()
 }
 
 fn issues_json(issues: Vec<ProfileError>) -> String {

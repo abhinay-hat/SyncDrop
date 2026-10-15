@@ -1,7 +1,5 @@
 name: Release
 
-# Cut a release by pushing a version tag, e.g.:
-#   git tag v1.0.1 && git push origin v1.0.1
 on:
   push:
     tags:
@@ -9,98 +7,122 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v1.0.1)"
+        description: "Tag to release (e.g. v0.1.0)"
         required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14
+  desktop:
+    name: desktop (${{ matrix.os }}${{ matrix.target && format(' {0}', matrix.target) || '' }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: ""
+            args: ""
+          - os: windows-latest
+            target: ""
+            args: ""
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Resolve version
-        id: ver
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
 
-      # Notarized path requires these repo secrets. If APP_IDENTITY is unset we
-      # fall back to a clean ad-hoc build (still uploaded, just not notarized).
-      - name: Detect signing capability
-        id: sign
+      # Blank secrets stay unset. An empty APPLE_CERTIFICATE is still "set"
+      # and Tauri tries to import it, which fails the unsigned build.
+      - name: Apple signing env
+        if: runner.os == 'macOS'
         env:
-          APP_IDENTITY: ${{ secrets.APP_IDENTITY }}
-        run: |
-          if [ -n "$APP_IDENTITY" ]; then
-            echo "notarize=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "notarize=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No APP_IDENTITY secret set — building an ad-hoc (non-notarized) release."
-          fi
-
-      - name: Import Developer ID certificate
-        if: steps.sign.outputs.notarize == 'true'
-        env:
-          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
-          KPW="$(openssl rand -base64 24)"
-          security create-keychain -p "$KPW" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KPW" "$KEYCHAIN"
-          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN"
-          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KPW" "$KEYCHAIN" >/dev/null
-          rm -f "$RUNNER_TEMP/cert.p12"
+          add_secret() {
+            if [ -n "$2" ]; then
+              {
+                echo "${1}<<SYNCDROP_ENV"
+                echo "$2"
+                echo "SYNCDROP_ENV"
+              } >> "$GITHUB_ENV"
+            fi
+          }
+          add_secret APPLE_CERTIFICATE "$APPLE_CERTIFICATE"
+          add_secret APPLE_CERTIFICATE_PASSWORD "$APPLE_CERTIFICATE_PASSWORD"
+          add_secret APPLE_SIGNING_IDENTITY "$APPLE_SIGNING_IDENTITY"
+          add_secret APPLE_ID "$APPLE_ID"
+          add_secret APPLE_PASSWORD "$APPLE_PASSWORD"
+          add_secret APPLE_TEAM_ID "$APPLE_TEAM_ID"
 
-      - name: Build, sign & notarize
-        if: steps.sign.outputs.notarize == 'true'
+      - uses: tauri-apps/tauri-action@action-v0.6.2
         env:
-          APP_IDENTITY: ${{ secrets.APP_IDENTITY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
-        run: ./Scripts/sign-and-notarize.sh
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop/app
+          args: ${{ matrix.args }}
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: SyncDrop v__VERSION__
+          releaseDraft: false
+          prerelease: ${{ startsWith(github.event.inputs.tag || github.ref_name, 'v0.') }}
+          releaseBody: |
+            macOS unsigned: right-click > Open, or `xattr -dr com.apple.quarantine` on the app.
+            Windows SmartScreen: More info > Run anyway.
+            Linux AppImage: `chmod +x` before launching.
 
-      - name: Build ad-hoc (no secrets)
-        if: steps.sign.outputs.notarize == 'false'
-        run: |
-          make desktop
-          APP="desktop/target/release/bundle/macos/SyncDrop.app"
-          xattr -cr "$APP"
-          find "$APP" -name '._*' -delete
-          rm -f SyncDrop.zip
-          /usr/bin/ditto --norsrc -c -k --keepParent "$APP" SyncDrop.zip
+  android:
+    name: android
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Verify artifact
-        run: |
-          test -f SyncDrop.zip
-          unzip -l SyncDrop.zip | grep -q "SyncDrop.app" && echo "bundle present"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
 
-      - name: Create / update GitHub Release
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload APK to the release
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.ver.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          NOTES="Release $TAG. See the README for install steps."
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" SyncDrop.zip --clobber
-          else
-            gh release create "$TAG" SyncDrop.zip \
-              --title "SyncDrop $TAG" \
-              --generate-notes
-          fi
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          APK="SyncDrop-android-v${VER}.apk"
+          mv android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          gh release upload "$TAG" "$APK" --clobber

@@ -510,8 +510,8 @@ mod tests {
     fn active_profile_defaults_are_correct() {
         let (_dir, store) = open_store();
         let p = store.active_profile();
-        assert_eq!(p.source_path, "~/Desktop/Projects");
-        assert_eq!(p.ssd_name, "Extreme Pro");
+        assert_eq!(p.source_path, "");
+        assert_eq!(p.ssd_name, "");
         assert_eq!(p.dest_path, "");
         assert!(!p.auto_sync);
         assert!(!p.mirror_mode);
@@ -587,7 +587,10 @@ mod tests {
 
     #[test]
     fn expanded_source_path_proxies_active_profile() {
-        let (_dir, store) = open_store();
+        let (_dir, mut store) = open_store();
+        let mut p = store.active_profile().clone();
+        p.source_path = "~/Desktop/Projects".to_string();
+        store.set_active_profile(p).unwrap();
         let home = dirs::home_dir().unwrap();
         assert!(store.expanded_source_path().starts_with(&*home.to_string_lossy()));
         assert!(!store.expanded_source_path().contains('~'));

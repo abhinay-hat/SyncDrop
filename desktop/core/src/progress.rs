@@ -79,6 +79,12 @@ pub struct SyncRecord {
     /// Display name of the profile that produced this run. Older history has none.
     #[serde(default)]
     pub profile_name: String,
+    /// Id of the profile that produced this run. Older history has none.
+    #[serde(default)]
+    pub profile_id: String,
+    /// Why a failed run stopped. Absent on older history and on successes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 impl SyncRecord {
@@ -97,6 +103,8 @@ impl SyncRecord {
             duration_seconds,
             succeeded,
             profile_name: String::new(),
+            profile_id: String::new(),
+            error: None,
         }
     }
 
@@ -168,6 +176,34 @@ mod tests {
         assert_eq!(decoded.id, record.id);
         assert_eq!(decoded.date, record.date);
         assert_eq!(record.formatted_duration(), "3s");
+        assert_eq!(decoded.error, None);
+        assert_eq!(decoded.profile_id, "");
+
+        let mut failed = record.clone();
+        failed.succeeded = false;
+        failed.error = Some("The destination filled up.".into());
+        let again: SyncRecord = serde_json::from_slice(&serde_json::to_vec(&failed).unwrap()).unwrap();
+        assert_eq!(again.error.as_deref(), Some("The destination filled up."));
+
+        let legacy = serde_json::json!({
+            "id": record.id,
+            "date": record.date,
+            "fileCount": 1,
+            "totalBytes": 2,
+            "durationSeconds": 3.0,
+            "succeeded": false,
+            "profileName": "Photos"
+        });
+        let old: SyncRecord = serde_json::from_value(legacy).unwrap();
+        assert_eq!(old.error, None);
+        assert_eq!(old.profile_name, "Photos");
+        assert_eq!(old.profile_id, "");
+
+        let mut tagged = record.clone();
+        tagged.profile_id = "profile-1".into();
+        let with_id: SyncRecord =
+            serde_json::from_slice(&serde_json::to_vec(&tagged).unwrap()).unwrap();
+        assert_eq!(with_id.profile_id, "profile-1");
     }
 
     #[test]

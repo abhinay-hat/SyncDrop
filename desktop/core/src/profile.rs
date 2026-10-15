@@ -57,9 +57,9 @@ impl SyncProfile {
         Self {
             id: Uuid::new_v4(),
             name: name.into(),
-            source_path: "~/Desktop/Projects".to_string(),
+            source_path: String::new(),
             dest_path: String::new(),
-            ssd_name: "Extreme Pro".to_string(),
+            ssd_name: String::new(),
             mirror_mode: false,
             auto_sync: false,
             auto_eject: false,
@@ -356,6 +356,7 @@ mod tests {
     #[test]
     fn expands_tilde_and_leaves_absolute_paths() {
         let mut p = SyncProfile::new("t");
+        p.source_path = "~/Desktop/Projects".to_string();
         let expected = dirs::home_dir().unwrap().join("Desktop/Projects");
         assert_eq!(p.expanded_source_path(), expected.to_string_lossy());
         assert!(!p.expanded_source_path().contains('~'));

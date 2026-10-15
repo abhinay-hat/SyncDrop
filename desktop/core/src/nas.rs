@@ -199,6 +199,33 @@ impl AutoMountHandle {
         )
     }
 
+    /// Remount every profile that has auto-mount turned on.
+    pub fn spawn_profiles(profiles: Arc<Mutex<Vec<SyncProfile>>>) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_flag = Arc::clone(&stop);
+        let thread = thread::Builder::new()
+            .name("syncdrop-nas".into())
+            .spawn(move || {
+                while !stop_flag.load(Ordering::Relaxed) {
+                    let snapshot = lock(&profiles).clone();
+                    attempt_auto_mount_all(
+                        &snapshot,
+                        &KeyringStore,
+                        &SystemMounter,
+                        &current_mount_points,
+                    );
+                    if !interruptible_sleep(NAS_REMOUNT_INTERVAL, &stop_flag) {
+                        break;
+                    }
+                }
+            })
+            .expect("spawn nas remount thread");
+        Self {
+            stop,
+            thread: Some(thread),
+        }
+    }
+
     pub fn stop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.thread.take() {
@@ -482,15 +509,30 @@ where
     F: Fn() -> Vec<PathBuf>,
 {
     let snapshot = lock(profile).clone();
-    if !snapshot.auto_mount_nas {
-        return;
-    }
+    attempt_auto_mount_all(std::slice::from_ref(&snapshot), secrets, mounter, list_mounts);
+}
+
+fn attempt_auto_mount_all<S, M, F>(
+    profiles: &[SyncProfile],
+    secrets: &S,
+    mounter: &M,
+    list_mounts: &F,
+) where
+    S: SecretStore,
+    M: Mounter,
+    F: Fn() -> Vec<PathBuf>,
+{
     let mounted = list_mounts();
-    if is_already_mounted(&snapshot.ssd_name, &mounted) {
-        return;
-    }
-    if let Err(err) = mount_with(&snapshot, secrets, mounter, &mounted) {
-        log::warn!("nas auto-mount failed: {err}");
+    for snapshot in profiles {
+        if !snapshot.auto_mount_nas {
+            continue;
+        }
+        if is_already_mounted(&snapshot.ssd_name, &mounted) {
+            continue;
+        }
+        if let Err(err) = mount_with(snapshot, secrets, mounter, &mounted) {
+            log::warn!("nas auto-mount failed: {err}");
+        }
     }
 }
 
@@ -610,6 +652,25 @@ mod tests {
             let err = mount_with(&profile, &PanicStore, &PanicMounter, &[] as &[PathBuf]).unwrap_err();
             assert_eq!(err, NasError::MissingHostOrShare);
         }
+    }
+
+    #[test]
+    fn auto_mount_tries_every_profile_that_asks() {
+        let mut alpha = nas_profile(Some("nas.local"), Some("Alpha"));
+        alpha.ssd_name = "Alpha".into();
+        let mut beta = nas_profile(Some("nas.local"), Some("Beta"));
+        beta.ssd_name = "Beta".into();
+        let mut quiet = nas_profile(Some("nas.local"), Some("Quiet"));
+        quiet.auto_mount_nas = false;
+        quiet.ssd_name = "Quiet".into();
+        let mounter = RecordingMounter {
+            calls: Mutex::new(Vec::new()),
+        };
+        attempt_auto_mount_all(&[alpha, beta, quiet], &PanicStore, &mounter, &Vec::new);
+        let calls = lock(&mounter.calls);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].share, "Alpha");
+        assert_eq!(calls[1].share, "Beta");
     }
 
     #[test]

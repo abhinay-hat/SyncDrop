@@ -6,39 +6,49 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="popup">
-  <section id="progress-view" class="card">
-    <header>
-      <h1 id="heading">SyncDrop</h1>
-      <p id="sub" class="help"></p>
-    </header>
-    <div class="meter">
-      <progress id="bar" max="100" value="0"></progress>
-      <span id="percent">0%</span>
-    </div>
-    <dl class="stats">
-      <div><dt>Files</dt><dd id="files">0 / 0</dd></div>
-      <div><dt>Bytes</dt><dd id="bytes">0 bytes</dd></div>
-      <div><dt>Speed</dt><dd id="speed">—</dd></div>
-      <div><dt>ETA</dt><dd id="eta">—</dd></div>
-    </dl>
-    <p id="current" class="current"></p>
-    <p id="message" class="message"></p>
-    <p id="summary" class="summary" hidden></p>
-    <div class="actions">
-      <button id="dismiss" type="button" hidden>Close</button>
-      <button id="retry" type="button" hidden>Retry</button>
-      <button id="cancel" type="button">Cancel</button>
-    </div>
-  </section>
-  <section id="dry-view" class="card" hidden>
-    <h1>Dry run</h1>
-    <div id="groups"></div>
-    <p id="dry-error" class="message"></p>
-    <div class="actions">
-      <button id="dry-cancel" type="button">Cancel</button>
-      <button id="dry-sync" type="button" class="primary">Confirm sync</button>
-    </div>
-  </section>
+  <p id="live" class="sr" role="status" aria-live="polite"></p>
+  <main>
+    <section id="progress-view" class="stage">
+      <header>
+        <h1 id="heading" class="display">SyncDrop</h1>
+        <p id="sub" class="help"></p>
+      </header>
+      <div id="meter" class="meter">
+        <progress id="bar" max="100" value="0"></progress>
+        <span id="percent" class="title">0%</span>
+      </div>
+      <dl id="stats" class="stats">
+        <div><dt>Files</dt><dd id="files">0 / 0</dd></div>
+        <div><dt>Bytes</dt><dd id="bytes">0 bytes</dd></div>
+        <div id="stat-speed"><dt>Speed</dt><dd id="speed">—</dd></div>
+        <div id="stat-eta"><dt>ETA</dt><dd id="eta">—</dd></div>
+      </dl>
+      <p id="current" class="current"></p>
+      <p id="message" class="message" hidden></p>
+      <p id="summary" class="lead" hidden></p>
+      <div class="actions">
+        <button id="eject" type="button" hidden>Eject</button>
+        <button id="open-logs" type="button" hidden>Open logs</button>
+        <button id="retry" type="button" hidden>Retry</button>
+        <button id="dismiss" type="button" hidden>Close</button>
+        <button id="cancel" type="button" class="primary">Cancel</button>
+      </div>
+    </section>
+    <section id="dry-view" class="stage" hidden>
+      <header>
+        <h1 id="dry-heading" class="title">Preview</h1>
+      </header>
+      <div id="dry-scroll">
+        <div id="groups"></div>
+        <p id="dry-error" class="message" hidden></p>
+        <p id="dry-empty" class="lead" hidden>Already up to date</p>
+      </div>
+      <div class="actions">
+        <button id="dry-cancel" type="button">Cancel</button>
+        <button id="dry-sync" type="button" class="primary">Confirm sync</button>
+      </div>
+    </section>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>
