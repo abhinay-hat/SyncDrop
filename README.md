@@ -144,7 +144,7 @@ See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
 #### Automated releases (GitHub Actions)
 
-`make release` prints the tag and push commands. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds desktop installers and the Android debug APK and attaches them to a GitHub Release. `0.x` tags are marked prerelease.
+`make release` prints the tag and push commands. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds desktop installers and the Android debug APK and attaches them to a GitHub Release. 
 
 ```bash
 make release

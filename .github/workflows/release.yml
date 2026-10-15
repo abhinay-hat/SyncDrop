@@ -91,7 +91,7 @@ jobs:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: SyncDrop v__VERSION__
           releaseDraft: false
-          prerelease: ${{ startsWith(github.event.inputs.tag || github.ref_name, 'v0.') }}
+          prerelease: false
           releaseBody: |
             macOS unsigned: right-click > Open, or `xattr -dr com.apple.quarantine` on the app.
             Windows SmartScreen: More info > Run anyway.
