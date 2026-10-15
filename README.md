@@ -42,7 +42,6 @@ Installers for the current release are on **[GitHub Releases](https://github.com
 | Linux deb | [`SyncDrop_0.1.0_amd64.deb`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_amd64.deb) |
 | Android | [`SyncDrop-android-v0.1.0.apk`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop-android-v0.1.0.apk) |
 
-macOS also includes `SyncDrop_aarch64.app.tar.gz` and `SyncDrop_x64.app.tar.gz` (the `.app` bundle).
 
 **Install notes**
 
