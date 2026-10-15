@@ -40,3 +40,4 @@ desktop/target/
 
 # Design critique snapshots
 .impeccable/
+.playwright-cli/

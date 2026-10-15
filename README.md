@@ -8,27 +8,26 @@
 
 [![Download](https://img.shields.io/badge/Download-latest%20release-2E7DF6?style=for-the-badge)](https://github.com/abhinay-hat/SyncDrop/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1FB6C9.svg?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/macOS-13%2B-555.svg?style=for-the-badge)](#requirements)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-555.svg?style=for-the-badge)](#download)
 
 <br>
 
-![SyncDrop](docs/screenshots/hero.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-dark.png">
+  <img src="docs/screenshots/hero.png" width="900" alt="SyncDrop main window, Photos profile, Extreme Pro connected">
+</picture>
 
 </div>
 
-SyncDrop is a lightweight macOS **menu-bar** app. No dock icon, no window clutter.
+SyncDrop is a tray app for macOS (menu bar), Windows, and Linux (system tray), plus an Android app. Point a profile at a folder. When the external drive connects, the NAS share mounts, or Google Drive is signed in, that folder syncs.
 
-Think of it like OneDrive or iCloud Drive — but instead of syncing to a cloud you don't control, it syncs the folders **you** pick to **your own** storage device. Configure your folders once; then whenever you connect the configured drive — an **external SSD, USB pen drive, or hard disk** — SyncDrop automatically mirrors your selected files onto it. Plug in, it syncs, you're backed up. No subscriptions, no cloud, your data stays yours.
+The desktop copy engine is Rust. It does not shell out to rsync.
 
-<div align="center">
+## Quick start
 
-![SyncDrop demo](docs/screenshots/demo.gif)
-
-*Plug in your drive → SyncDrop detects it → mirrors your folders → done.*
-
-</div>
-
----
+1. Add a profile.
+2. Pick the target — **External drive**, **Network share**, or **Google Drive** — then the source folder and the destination.
+3. Turn on **Auto-sync**.
 
 ## Download
 
@@ -51,104 +50,76 @@ macOS also includes `SyncDrop_aarch64.app.tar.gz` and `SyncDrop_x64.app.tar.gz` 
 - **Windows SmartScreen:** **More info > Run anyway**.
 - **Linux AppImage:** `chmod +x` the file before launching it.
 
-## Install
-
-### Build from source
-
-Requires the Swift toolchain (Xcode or Command Line Tools).
-
-```bash
-git clone https://github.com/abhinay-hat/SyncDrop.git
-cd SyncDrop
-
-make app        # builds a signed SyncDrop.app in the repo root
-make install    # builds and copies it to ~/Applications
-```
-
-Other targets:
-
-```bash
-swift build     # debug build
-swift test      # run unit tests (needs full Xcode, not just Command Line Tools)
-make clean      # remove build artifacts
-```
-
----
-
-## First-time setup
-
-Open the menu-bar icon → **Settings**, then in the **Folders** tab:
-
-1. **Source (Mac)** — choose the folder you want backed up (e.g. `~/Desktop/Projects`).
-2. **SSD Volume Name** — type the exact name of your SSD as it appears in Finder (e.g. `Extreme Pro`).
-3. **Destination (on SSD)** — plug in the SSD, then choose the target folder on it.
-
-<div align="center">
-
-![SyncDrop settings](docs/screenshots/settings.png)
-
-</div>
-
-In the **Behavior** tab, turn on **Auto-sync when SSD connected** if you want it to run automatically. That's it — plug in the drive and SyncDrop syncs.
-
----
-
 ## Features
 
 | Feature | What it does |
 |---------|--------------|
-| **Auto-sync on connect** | Plug in your SSD and the sync starts (opt-in per profile). |
-| **Multiple profiles** | Different source/destination/exclude sets, switchable from the menu. |
-| **Dry-run preview** | See exactly what will be added, updated, or deleted before committing. |
-| **Mirror mode** | Adds `--delete` so the SSD exactly matches the Mac. |
-| **Versioned backups** | Overwritten/deleted files are kept under `.syncdrop_archive/<date>` instead of discarded. |
-| **Exclude patterns** | rsync glob patterns, with sane macOS defaults (`.DS_Store`, `node_modules`, …). |
-| **Auto-eject** | Safely ejects the SSD after a successful sync. |
-| **Sync history & notifications** | Recent runs (files, size, duration) and a completion notification. |
-| **exFAT-safe** | Avoids permission/ownership flags that break on exFAT; uses `--modify-window=1` for its 2-second timestamp granularity. |
+| **Auto-sync on connect** | Each profile can start a sync when its drive or share connects. |
+| **Multiple profiles** | Each profile has its own source, target, and rules, and is watched on its own. |
+| **Preview** | Preview lists copies, updates, and deletes. Exact mirror always previews before it writes and shows the delete count. Google Drive has no local preview; Sync now uploads changed files. |
+| **Copy or Exact mirror** | Copy adds and updates. Exact mirror also deletes destination files that are not in the source. |
+| **Versions** | With Keep versions on, replaced and deleted files move to `.syncdrop-versions/<YYYY-MM-DD_HHMMSS>/` on the destination. |
+| **Exclude globs** | Skip names such as `.DS_Store` and `node_modules`. |
+| **Network share** | SMB host, share, and username. Auto-mount retries about once a minute. The password stays in the OS keychain. |
+| **Google Drive** | OAuth upload with your own client id. Create a Desktop OAuth client, enable the Drive API, paste the redirect URI, then save the client id and secret and sign in. Secret and tokens stay in the keychain. [Google Cloud credentials](https://console.cloud.google.com/apis/credentials). |
+| **Auto-eject** | After a successful sync, eject the drive. The popup then says **Safe to unplug**. |
+| **History and logs** | Recent runs in the Activity tab. Daily log files (prefix `syncdrop`, seven kept) live in the logs directory below. |
+| **Notifications** | Optional system notification when a sync finishes. |
+| **Launch at login** | Start SyncDrop when you sign in. |
+| **Shortcuts** | Cmd on macOS, Ctrl elsewhere: **S** save, **R** sync now, **.** cancel, **,** preferences. |
+| **Dark mode** | Follows the system appearance. |
+| **exFAT-safe copies** | Copies file contents only (no owner or permission bits) and treats timestamps within one second as equal. A file is replaced by writing a temp file and renaming it into place. |
 
----
+## Screenshots
 
-## Requirements
+| Syncing | Preview |
+|---------|---------|
+| <img src="docs/screenshots/syncing.png" width="420" alt="Inline progress while Photos syncs to Extreme Pro"> | <img src="docs/screenshots/preview.png" width="280" alt="Mirror preview listing copies, an update, and three deletes"> |
+| **Sync complete** | **Network share** |
+| <img src="docs/screenshots/done.png" width="280" alt="Sync complete popup with an Eject button"> | <img src="docs/screenshots/network.png" width="420" alt="Network share form for host, share, and auto-mount"> |
+| **Activity** | |
+| <img src="docs/screenshots/activity.png" width="420" alt="Activity tab, logs view, dark mode"> | |
 
-- macOS, Windows, or Linux for the desktop app (WebView2 on Windows, webkit2gtk 4.1 on Linux)
-- Rust and `tauri-cli` ^2 for source builds (`cargo` is `~/.cargo/bin/cargo`)
+## Build from source
 
----
+Rust and `tauri-cli` ^2. On Linux: `sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Windows needs WebView2.
 
-## How it works
+```bash
+make desktop-run    # cargo run -p syncdrop
+make desktop-test   # cargo test in desktop/
+make desktop        # cargo tauri build in desktop/app
+```
 
-The desktop app polls for the configured drive. On connect — with auto-sync enabled — the Rust copy engine mirrors the selected folders and reports progress to the tray. Profiles, settings, and history persist in `config.json`.
+Android:
 
----
+```bash
+cd android && ./gradlew :app:assembleDebug
+```
+
+## Where data lives
+
+`config.json` is `dirs::config_dir()/SyncDrop/config.json`. Logs are `dirs::data_local_dir()/SyncDrop/logs/` (`dirs` 6).
+
+| | config.json | logs |
+|--|-------------|------|
+| macOS | `~/Library/Application Support/SyncDrop/config.json` | `~/Library/Application Support/SyncDrop/logs/` |
+| Windows | `%APPDATA%\SyncDrop\config.json` | `%LOCALAPPDATA%\SyncDrop\logs\` |
+| Linux | `$XDG_CONFIG_HOME/SyncDrop/config.json` or `~/.config/SyncDrop/config.json` | `$XDG_DATA_HOME/SyncDrop/logs/` or `~/.local/share/SyncDrop/logs/` |
 
 ## Project layout
 
 ```
-desktop/
-  core/            # syncdrop-core: profiles, config, copy engine, volumes, NAS, Drive
-  app/             # Tauri 2 tray app + ui/
-android/           # Android port (work in progress)
+desktop/core/    # syncdrop-core: profiles, config, copy engine, volumes, NAS, Google Drive
+desktop/app/     # Tauri 2 tray app and ui/
+android/         # Jetpack Compose app (USB OTG, Room, WorkManager)
 ```
-
----
 
 ## Roadmap
 
-SyncDrop today is macOS → local drive. The goal is **sync the folders you choose to any storage you own, from any device.** Planned:
-
-- **NAS / network drives** — sync to a NAS or any mounted network share, not just USB-attached drives.
-- **Android app** — sync from your phone to a USB-OTG SSD/pen drive (in progress under [`android/`](android/)).
-- **Windows app** — the same plug-in-and-sync experience on Windows.
-- **More targets** — any drive type macOS/Windows can mount (SSD, pen drive, HDD, SD card).
-
-Have a use case or want to help build one of these? Open an issue.
-
-## Android (in progress)
-
-An Android port (Kotlin + Jetpack Compose) targeting USB-OTG drive sync is in early development under [`android/`](android/).
-
----
+- Signed and notarized release builds by default
+- Auto-update
+- More cloud targets
+- Share the Rust core with the Android app
 
 ## Contributing
 
