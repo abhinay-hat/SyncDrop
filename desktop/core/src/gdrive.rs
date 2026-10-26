@@ -840,16 +840,21 @@ mod client {
     }
 
     pub fn folder_search_query(name: &str, parent_id: &str) -> String {
-        let name = name.replace('\'', "\\'");
-        let parent = parent_id.replace('\'', "\\'");
+        let name = drive_query_string(name);
+        let parent = drive_query_string(parent_id);
         format!(
             "name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '{parent}' in parents"
         )
     }
 
     pub fn list_children_query(folder_id: &str) -> String {
-        let id = folder_id.replace('\'', "\\'");
+        let id = drive_query_string(folder_id);
         format!("'{id}' in parents and trashed = false")
+    }
+
+    /// Escape `\` then `'` for Drive `q` string literals.
+    fn drive_query_string(value: &str) -> String {
+        value.replace('\\', "\\\\").replace('\'', "\\'")
     }
 
     pub fn mime_type_for_path(path: &Path) -> &'static str {
@@ -1219,6 +1224,10 @@ mod client {
             assert_eq!(
                 folder_search_query("O'Brien", "root"),
                 "name = 'O\\'Brien' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'root' in parents"
+            );
+            assert_eq!(
+                folder_search_query("a\\b'c", "root"),
+                "name = 'a\\\\b\\'c' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'root' in parents"
             );
             assert_eq!(upload_strategy(4_999_999), UploadStrategy::Multipart);
             assert_eq!(upload_strategy(5_000_000), UploadStrategy::Resumable);

@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -260,9 +260,10 @@ where
     for rel in &work {
         check_cancel(Some(cancel))?;
         progress(files_done, files_total, bytes_done, bytes_total, rel);
+        let dest_file = join_under(dest, rel)?;
         let n = copy_file(
             &source.join(rel),
-            &dest.join(rel),
+            &dest_file,
             dest,
             rel,
             profile.keep_versions,
@@ -290,10 +291,12 @@ fn copy_file(
     keep_versions: bool,
     stamp: &str,
 ) -> io::Result<u64> {
+    ensure_within_root(dest_root, dest_file)?;
     if let Some(parent) = dest_file.parent() {
-        fs::create_dir_all(parent)?;
+        create_dir_all_nofollow(dest_root, parent)?;
     }
     let tmp = tmp_sibling(dest_file)?;
+    ensure_within_root(dest_root, &tmp)?;
     let bytes = write_tmp(src, &tmp)?;
     let committed = commit_copy(&tmp, dest_file, dest_root, rel, keep_versions, stamp);
     if committed.is_err() {
@@ -304,6 +307,84 @@ fn copy_file(
         filetime::set_file_mtime(dest_file, FileTime::from_system_time(modified))?;
     }
     Ok(bytes)
+}
+
+/// Join `rel` under `root`, rejecting `..` and absolute components.
+fn join_under(root: &Path, rel: &str) -> io::Result<PathBuf> {
+    let mut out = root.to_path_buf();
+    for component in Path::new(rel).components() {
+        match component {
+            Component::Normal(part) => out.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "relative path escapes the destination root",
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// True when `candidate` resolves under `root` (symlink-aware for existing ancestors).
+fn ensure_within_root(root: &Path, candidate: &Path) -> io::Result<()> {
+    let root_canon = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut existing = candidate.to_path_buf();
+    let mut missing: Vec<std::ffi::OsString> = Vec::new();
+    while !existing.as_os_str().is_empty() && !existing.exists() {
+        match existing.file_name() {
+            Some(name) => {
+                missing.push(name.to_os_string());
+                match existing.parent() {
+                    Some(parent) => existing = parent.to_path_buf(),
+                    None => break,
+                }
+            }
+            None => break,
+        }
+    }
+    let mut resolved = if existing.exists() {
+        fs::canonicalize(&existing)?
+    } else {
+        root_canon.clone()
+    };
+    for part in missing.iter().rev() {
+        resolved.push(part);
+    }
+    if resolved == root_canon || resolved.starts_with(&root_canon) {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination path escapes the sync root",
+        ))
+    }
+}
+
+/// Create `dir` under `root` without following directory symlinks that leave the root.
+fn create_dir_all_nofollow(root: &Path, dir: &Path) -> io::Result<()> {
+    ensure_within_root(root, dir)?;
+    if dir.exists() {
+        let meta = fs::symlink_metadata(dir)?;
+        if meta.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "destination directory is a symlink",
+            ));
+        }
+        return Ok(());
+    }
+    if let Some(parent) = dir.parent() {
+        if parent != dir {
+            create_dir_all_nofollow(root, parent)?;
+        }
+    }
+    match fs::create_dir(dir) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 fn commit_copy(
@@ -335,7 +416,8 @@ fn write_tmp(src: &Path, tmp: &Path) -> io::Result<u64> {
 }
 
 fn archive_file(dest_root: &Path, rel: &str, stamp: &str) -> io::Result<()> {
-    let from = dest_root.join(rel);
+    let from = join_under(dest_root, rel)?;
+    ensure_within_root(dest_root, &from)?;
     let meta = match fs::symlink_metadata(&from) {
         Ok(m) if m.is_file() => m,
         Ok(_) => return Ok(()),
@@ -343,9 +425,11 @@ fn archive_file(dest_root: &Path, rel: &str, stamp: &str) -> io::Result<()> {
         Err(e) => return Err(e),
     };
     let _ = meta;
-    let to = dest_root.join(VERSIONS_DIR).join(stamp).join(rel);
+    let version_rel = format!("{VERSIONS_DIR}/{stamp}/{rel}");
+    let to = join_under(dest_root, &version_rel)?;
+    ensure_within_root(dest_root, &to)?;
     if let Some(parent) = to.parent() {
-        fs::create_dir_all(parent)?;
+        create_dir_all_nofollow(dest_root, parent)?;
     }
     if to.exists() {
         fs::remove_file(&to)?;
@@ -354,7 +438,8 @@ fn archive_file(dest_root: &Path, rel: &str, stamp: &str) -> io::Result<()> {
 }
 
 fn delete_path(dest_root: &Path, rel: &str, keep_versions: bool, stamp: &str) -> io::Result<()> {
-    let path = dest_root.join(rel);
+    let path = join_under(dest_root, rel)?;
+    ensure_within_root(dest_root, &path)?;
     let meta = match fs::symlink_metadata(&path) {
         Ok(m) => m,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),

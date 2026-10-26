@@ -18,7 +18,7 @@ object FileCopier {
         if (destRoot.startsWith("content://")) {
             return copyToSafTree(entry, Uri.parse(destRoot), context)
         }
-        val destFile = File(destRoot, entry.relativePath)
+        val destFile = resolveUnderRoot(destRoot, entry.relativePath) ?: return false
         return try {
             destFile.parentFile?.let { parent ->
                 if (!parent.exists() && !parent.mkdirs()) {
@@ -53,7 +53,8 @@ object FileCopier {
     private fun copyToSafTree(entry: FileEntry, rootUri: Uri, context: Context): Boolean {
         return try {
             val rootDoc = DocumentFile.fromTreeUri(context, rootUri) ?: return false
-            val segments = entry.relativePath.split('/')
+            val segments = safeSegments(entry.relativePath) ?: return false
+            if (segments.isEmpty()) return false
             val dirSegments = segments.dropLast(1)
             val fileName = segments.last()
 
@@ -94,7 +95,7 @@ object FileCopier {
             return deleteFromSafTree(relativePath, Uri.parse(destRoot), context)
         }
         return try {
-            val f = File(destRoot, relativePath)
+            val f = resolveUnderRoot(destRoot, relativePath) ?: return false
             if (f.exists()) f.delete() else true
         } catch (e: Exception) {
             Log.e(TAG, "Delete failed for $relativePath: ${e.message}", e)
@@ -105,7 +106,7 @@ object FileCopier {
     private fun deleteFromSafTree(relativePath: String, rootUri: Uri, context: Context): Boolean {
         return try {
             val rootDoc = DocumentFile.fromTreeUri(context, rootUri) ?: return true
-            val segments = relativePath.split('/')
+            val segments = safeSegments(relativePath) ?: return true
             var current: DocumentFile? = rootDoc
             for (seg in segments) {
                 current = current?.findFile(seg) ?: return true
@@ -115,6 +116,33 @@ object FileCopier {
             Log.e(TAG, "SAF delete failed for $relativePath: ${e.message}", e)
             false
         }
+    }
+
+    /** Reject `..` / empty segments and keep the resolved file under [destRoot]. */
+    internal fun resolveUnderRoot(destRoot: String, relativePath: String): File? {
+        val segments = safeSegments(relativePath) ?: return null
+        val root = File(destRoot).canonicalFile
+        var current = root
+        for (seg in segments) {
+            current = File(current, seg)
+        }
+        val resolved = current.canonicalFile
+        val rootPath = root.path
+        if (resolved == root) return null
+        if (!resolved.path.startsWith(rootPath + File.separator)) return null
+        return resolved
+    }
+
+    private fun safeSegments(relativePath: String): List<String>? {
+        val parts = relativePath.split('/', '\\')
+        if (parts.isEmpty()) return null
+        val out = ArrayList<String>(parts.size)
+        for (part in parts) {
+            if (part.isEmpty() || part == ".") continue
+            if (part == "..") return null
+            out.add(part)
+        }
+        return out.takeIf { it.isNotEmpty() }
     }
 
     private const val TAG = "FileCopier"

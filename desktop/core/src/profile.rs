@@ -152,6 +152,11 @@ impl SyncProfile {
         if self.auto_mount_nas && share.is_none() {
             issues.push(ProfileError::NasShareRequired);
         }
+        if let Some(share) = share {
+            if !valid_nas_share(share) {
+                issues.push(ProfileError::BadNasShare);
+            }
+        }
 
         for pattern in &self.excludes {
             let pattern = pattern.trim();
@@ -195,6 +200,8 @@ pub enum ProfileError {
     NasHostRequired,
     #[error("Enter the share name to auto-mount.")]
     NasShareRequired,
+    #[error("Share name cannot contain path separators or ..")]
+    BadNasShare,
     #[error("Exclude pattern is not a valid glob: {0}")]
     BadExclude(String),
 }
@@ -206,7 +213,7 @@ impl ProfileError {
             Self::EmptyDest | Self::SamePath | Self::DestInsideSource => "dest",
             Self::EmptyDrive => "ssd",
             Self::BadNasHost | Self::NasHostRequired => "nasHost",
-            Self::NasShareRequired => "nasShare",
+            Self::NasShareRequired | Self::BadNasShare => "nasShare",
             Self::BadExclude(_) => "excludes",
         }
     }
@@ -257,6 +264,17 @@ fn path_inside(parent: &Path, child: &Path) -> bool {
     let parent: Vec<_> = parent.components().collect();
     let child: Vec<_> = child.components().collect();
     child.len() > parent.len() && child.starts_with(&parent)
+}
+
+/// SMB share label for mount matching: one component, no `..`.
+fn valid_nas_share(share: &str) -> bool {
+    let share = share.trim();
+    !share.is_empty()
+        && share != "."
+        && share != ".."
+        && !share.contains('/')
+        && !share.contains('\\')
+        && !share.contains('\0')
 }
 
 /// Hostname or IP. A single trailing dot (FQDN) is accepted.

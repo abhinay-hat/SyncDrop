@@ -348,10 +348,26 @@ fn plan_mount(os: OsKind, request: &MountRequest) -> MountPlan {
 fn macos_mount_point(share: &str) -> PathBuf {
     // ponytail: a user-writable dir, not /Volumes (that mkdir needs root).
     // The basename is the share name so volume matching can see it.
+    // Never join raw share text: ".." or "a/b" would escape SyncDrop/mnt.
     let root = dirs::data_local_dir()
         .or_else(dirs::data_dir)
         .unwrap_or_else(std::env::temp_dir);
-    root.join("SyncDrop").join("mnt").join(share)
+    let safe = share_dir_name(share);
+    root.join("SyncDrop").join("mnt").join(safe)
+}
+
+/// Single path component for local mount dirs. Rejects separators and `..`.
+fn share_dir_name(share: &str) -> String {
+    let trimmed = share.trim().trim_matches(|c| c == '/' || c == '\\');
+    let base = Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if base.is_empty() || base == "." || base == ".." {
+        "share".to_string()
+    } else {
+        base.to_string()
+    }
 }
 
 fn smbfs_spec(request: &MountRequest, redact: bool) -> String {
@@ -716,6 +732,19 @@ mod tests {
             lock(&mounter.calls)[0].password.as_deref(),
             Some("s3cret")
         );
+    }
+
+    #[test]
+    fn mount_point_uses_share_basename_only() {
+        let nested = macos_mount_point("../../etc/passwd");
+        assert_eq!(nested.file_name().and_then(|n| n.to_str()), Some("passwd"));
+        assert!(nested
+            .components()
+            .any(|c| c.as_os_str() == "mnt"));
+        let dots = macos_mount_point("..");
+        assert_eq!(dots.file_name().and_then(|n| n.to_str()), Some("share"));
+        assert_eq!(share_dir_name("Backups"), "Backups");
+        assert_eq!(share_dir_name("a/b"), "b");
     }
 
     #[test]

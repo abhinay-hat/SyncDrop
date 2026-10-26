@@ -76,6 +76,7 @@ object FileComparer {
     ) {
         for (child in dir.listFiles()) {
             val name = child.name ?: continue
+            if (name == "." || name == ".." || name.contains('/') || name.contains('\\')) continue
             if (isExcluded(name, excludePatterns)) continue
             val childRelative = "$relativeDir/$name"
             if (child.isDirectory) {
@@ -123,6 +124,7 @@ object FileComparer {
     ) {
         for (child in dir.listFiles()) {
             val name = child.name ?: continue
+            if (name == "." || name == ".." || name.contains('/') || name.contains('\\')) continue
             val childRelative = if (relativeDir.isEmpty()) name else "$relativeDir/$name"
             if (child.isDirectory) {
                 walkDestTreeRecursive(child, childRelative, out)
