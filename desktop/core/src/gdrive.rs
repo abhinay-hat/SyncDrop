@@ -89,7 +89,7 @@ mod oauth {
     use super::*;
     use chrono::{DateTime, Utc};
     use serde::{Deserialize, Serialize};
-    use std::io::{Read, Write};
+    use std::io::Read;
     use std::net::TcpListener;
     use std::process::Command;
     use std::thread;
@@ -561,40 +561,64 @@ mod oauth {
             .set_nonblocking(true)
             .map_err(|_| GoogleOAuthError::ServerStartFailed)?;
         let deadline = Instant::now() + AUTH_WAIT;
-        let (mut stream, _) = loop {
-            match listener.accept() {
-                Ok(pair) => break pair,
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        return Err(GoogleOAuthError::UserCancelled);
-                    }
-                    thread::sleep(Duration::from_millis(50));
-                }
-                Err(_) => return Err(GoogleOAuthError::UserCancelled),
+        // Keep accepting until a request carries the expected state (or we time out).
+        // A local first-connect race must not steal the code or abort the wait.
+        loop {
+            if Instant::now() >= deadline {
+                return Err(GoogleOAuthError::UserCancelled);
             }
-        };
-        stream.set_nonblocking(false).ok();
-        stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
-        let mut buf = [0u8; 8192];
-        let n = stream
-            .read(&mut buf)
-            .map_err(|_| GoogleOAuthError::InvalidResponse)?;
-        if n == 0 {
-            return Err(GoogleOAuthError::InvalidResponse);
+            let (mut stream, _) = match listener.accept() {
+                Ok(pair) => pair,
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+            };
+            stream.set_nonblocking(false).ok();
+            stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
+            let mut buf = [0u8; 8192];
+            let n = match stream.read(&mut buf) {
+                Ok(0) | Err(_) => {
+                    let page = error_page("Sign-in could not be completed.");
+                    let _ = write_oauth_page(&mut stream, &page);
+                    continue;
+                }
+                Ok(n) => n,
+            };
+            let request = String::from_utf8_lossy(&buf[..n]);
+            match parse_oauth_callback(&request, expected_state) {
+                Ok(code) => {
+                    let _ = write_oauth_page(&mut stream, &success_page());
+                    return Ok(code);
+                }
+                Err(GoogleOAuthError::AuthorizationFailed(msg)) if msg == "State mismatch." => {
+                    let _ = write_oauth_page(&mut stream, &error_page(&msg));
+                    continue;
+                }
+                Err(GoogleOAuthError::AuthorizationFailed(msg)) => {
+                    let _ = write_oauth_page(&mut stream, &error_page(&msg));
+                    return Err(GoogleOAuthError::AuthorizationFailed(msg));
+                }
+                Err(err) => {
+                    let _ = write_oauth_page(&mut stream, &error_page("Sign-in could not be completed."));
+                    // Invalid / incomplete request from a racing client: keep listening.
+                    let _ = err;
+                    continue;
+                }
+            }
         }
-        let request = String::from_utf8_lossy(&buf[..n]);
-        let result = parse_oauth_callback(&request, expected_state);
-        let page = match &result {
-            Ok(_) => success_page(),
-            Err(GoogleOAuthError::AuthorizationFailed(msg)) => error_page(msg),
-            Err(_) => error_page("Sign-in could not be completed."),
-        };
+    }
+
+    fn write_oauth_page(stream: &mut impl std::io::Write, page: &str) -> std::io::Result<()> {
         let http = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{page}",
             page.len()
         );
-        let _ = stream.write_all(http.as_bytes());
-        result
+        stream.write_all(http.as_bytes())
     }
 
     fn success_page() -> String {

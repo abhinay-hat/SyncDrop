@@ -33,6 +33,9 @@ pub struct SyncProfile {
     pub source_path: String,
     pub dest_path: String,
     pub ssd_name: String,
+    /// Stable volume identifier (UUID / GUID / serial). Prefer this over [`ssd_name`] when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume_id: Option<String>,
     pub mirror_mode: bool,
     pub auto_sync: bool,
     pub auto_eject: bool,
@@ -60,6 +63,7 @@ impl SyncProfile {
             source_path: String::new(),
             dest_path: String::new(),
             ssd_name: String::new(),
+            volume_id: None,
             mirror_mode: false,
             auto_sync: false,
             auto_eject: false,

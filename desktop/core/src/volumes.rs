@@ -34,6 +34,8 @@ pub struct MountedDisk {
     pub name: String,
     pub mount_point: PathBuf,
     pub available_bytes: u64,
+    /// Stable id when the OS exposes one (volume UUID / GUID / serial).
+    pub volume_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,11 +84,38 @@ pub fn disk_matches(ssd_name: &str, disk: &MountedDisk) -> bool {
     mount_basename(&disk.mount_point) == Some(ssd_name)
 }
 
+/// Match by stable [`SyncProfile::volume_id`] when set; otherwise fall back to display name.
+pub fn disk_matches_profile(profile: &SyncProfile, disk: &MountedDisk) -> bool {
+    if let Some(id) = profile.volume_id.as_deref().filter(|s| !s.is_empty()) {
+        return disk.volume_id.as_deref() == Some(id);
+    }
+    disk_matches(&profile.ssd_name, disk)
+}
+
+/// When a name match finds a disk that has a volume id the profile lacks, return that id for migration.
+pub fn volume_id_to_migrate(profile: &SyncProfile, disks: &[MountedDisk]) -> Option<String> {
+    if profile
+        .volume_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        return None;
+    }
+    disks.iter().find_map(|disk| {
+        if disk_matches(&profile.ssd_name, disk) {
+            disk.volume_id.clone().filter(|id| !id.is_empty())
+        } else {
+            None
+        }
+    })
+}
+
 /// Where a profile is "connected", if anywhere.
 ///
 /// Order matches `VolumeMonitor.checkCurrentlyMountedVolumes`: Google Drive cloud
 /// (signed-in only), then an existing cloud-storage destination directory, then a
-/// mounted disk whose name or basename equals `ssd_name`.
+/// mounted disk matched by volume id or display name.
 pub fn resolve_mount(
     profile: &SyncProfile,
     google_signed_in: bool,
@@ -100,7 +129,10 @@ pub fn resolve_mount(
     if profile.is_cloud_storage() && !dest.is_empty() && dest_is_directory {
         return Some(PathBuf::from(dest));
     }
-    disks.iter().find(|d| disk_matches(&profile.ssd_name, d)).map(|d| d.mount_point.clone())
+    disks
+        .iter()
+        .find(|d| disk_matches_profile(profile, d))
+        .map(|d| d.mount_point.clone())
 }
 
 /// Free space on the disk mounted at `mount`, when that disk is in the snapshot.
@@ -139,12 +171,177 @@ pub fn list_mounted_disks() -> Vec<MountedDisk> {
     disks
         .list()
         .iter()
-        .map(|disk| MountedDisk {
-            name: disk.name().to_string_lossy().into_owned(),
-            mount_point: disk.mount_point().to_path_buf(),
-            available_bytes: disk.available_space(),
+        .map(|disk| {
+            let mount_point = disk.mount_point().to_path_buf();
+            let name = disk.name().to_string_lossy().into_owned();
+            let volume_id = lookup_volume_id(&mount_point, &name);
+            MountedDisk {
+                name,
+                mount_point,
+                available_bytes: disk.available_space(),
+                volume_id,
+            }
         })
         .collect()
+}
+
+/// Best-effort stable volume id for `mount` (and optional device `name` from sysinfo).
+pub fn lookup_volume_id(mount: &Path, device_name: &str) -> Option<String> {
+    lookup_volume_id_for_os(host_os(), mount, device_name)
+}
+
+fn lookup_volume_id_for_os(os: OsKind, mount: &Path, device_name: &str) -> Option<String> {
+    match os {
+        OsKind::Macos => macos_volume_uuid(mount),
+        OsKind::Linux => linux_volume_uuid(mount, device_name),
+        OsKind::Windows => windows_volume_id(mount),
+    }
+}
+
+fn macos_volume_uuid(mount: &Path) -> Option<String> {
+    let output = Command::new("diskutil")
+        .args(["info", "-plist"])
+        .arg(mount)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value: plist::Value = plist::from_bytes(&output.stdout).ok()?;
+    let dict = value.as_dictionary()?;
+    dict.get("VolumeUUID")
+        .and_then(|v| v.as_string())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn linux_volume_uuid(mount: &Path, device_name: &str) -> Option<String> {
+    let device = if device_name.starts_with("/dev/") {
+        Some(device_name.to_string())
+    } else {
+        None
+    };
+    if let Some(dev) = device.as_deref() {
+        if let Some(uuid) = linux_uuid_from_by_uuid(dev) {
+            return Some(uuid);
+        }
+        if let Some(uuid) = linux_uuid_from_lsblk(dev) {
+            return Some(uuid);
+        }
+    }
+    // Fall back: resolve device for this mount via findmnt, then look up UUID.
+    let output = Command::new("findmnt")
+        .args(["-n", "-o", "SOURCE", "--target"])
+        .arg(mount)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let src = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if src.is_empty() {
+        return None;
+    }
+    linux_uuid_from_by_uuid(&src).or_else(|| linux_uuid_from_lsblk(&src))
+}
+
+fn linux_uuid_from_by_uuid(device: &str) -> Option<String> {
+    let entries = std::fs::read_dir("/dev/disk/by-uuid").ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let target = std::fs::read_link(&path).ok()?;
+        let resolved = if target.is_absolute() {
+            target
+        } else {
+            PathBuf::from("/dev/disk/by-uuid").join(target)
+        };
+        let canon_link = resolved.canonicalize().unwrap_or(resolved);
+        let canon_dev = PathBuf::from(device).canonicalize().unwrap_or_else(|_| PathBuf::from(device));
+        if canon_link == canon_dev {
+            return entry.file_name().to_str().map(|s| s.to_string());
+        }
+    }
+    None
+}
+
+fn linux_uuid_from_lsblk(device: &str) -> Option<String> {
+    let output = Command::new("lsblk")
+        .args(["-n", "-o", "UUID"])
+        .arg(device)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let uuid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if uuid.is_empty() {
+        None
+    } else {
+        Some(uuid)
+    }
+}
+
+fn windows_volume_id(mount: &Path) -> Option<String> {
+    #[cfg(windows)]
+    {
+        windows_volume_id_native(mount)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = mount;
+        None
+    }
+}
+
+#[cfg(windows)]
+fn windows_volume_id_native(mount: &Path) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    };
+
+    let mut root = mount.display().to_string();
+    if !root.ends_with('\\') {
+        root.push('\\');
+    }
+    let wide: Vec<u16> = std::ffi::OsStr::new(&root)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut guid_buf = [0u16; 64];
+    let ok = unsafe {
+        GetVolumeNameForVolumeMountPointW(wide.as_ptr(), guid_buf.as_mut_ptr(), guid_buf.len() as u32)
+    };
+    if ok != 0 {
+        let len = guid_buf.iter().position(|&c| c == 0).unwrap_or(guid_buf.len());
+        let guid = String::from_utf16_lossy(&guid_buf[..len]);
+        if !guid.is_empty() {
+            return Some(guid);
+        }
+    }
+
+    let mut name_buf = [0u16; 64];
+    let mut serial: u32 = 0;
+    let ok = unsafe {
+        GetVolumeInformationW(
+            wide.as_ptr(),
+            name_buf.as_mut_ptr(),
+            name_buf.len() as u32,
+            &mut serial,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if ok != 0 && serial != 0 {
+        return Some(format!("serial:{serial:08X}"));
+    }
+    None
 }
 
 /// Background poller. Dropping it (or calling [`VolumeMonitor::stop`]) ends the thread.
@@ -425,6 +622,16 @@ mod tests {
             name: name.to_string(),
             mount_point: PathBuf::from(mount),
             available_bytes: 0,
+            volume_id: None,
+        }
+    }
+
+    fn disk_with_id(name: &str, mount: &str, id: &str) -> MountedDisk {
+        MountedDisk {
+            name: name.to_string(),
+            mount_point: PathBuf::from(mount),
+            available_bytes: 0,
+            volume_id: Some(id.to_string()),
         }
     }
 
@@ -444,6 +651,26 @@ mod tests {
         assert!(disk_matches("Extreme Pro", &by_base));
         assert!(!disk_matches("Extreme Pro", &other));
         assert!(!disk_matches("", &by_base));
+    }
+
+    #[test]
+    fn matches_by_volume_id_when_present_else_name() {
+        let disk = disk_with_id("Extreme Pro", "/Volumes/Extreme Pro", "UUID-1");
+        let mut profile = profile_named("Extreme Pro");
+        assert!(disk_matches_profile(&profile, &disk));
+        profile.volume_id = Some("UUID-1".into());
+        assert!(disk_matches_profile(&profile, &disk));
+        profile.volume_id = Some("UUID-OTHER".into());
+        assert!(!disk_matches_profile(&profile, &disk));
+        // Name fallback still works when volume_id is unset.
+        profile.volume_id = None;
+        assert!(disk_matches_profile(&profile, &disk));
+        assert_eq!(
+            volume_id_to_migrate(&profile, &[disk.clone()]).as_deref(),
+            Some("UUID-1")
+        );
+        profile.volume_id = Some("UUID-1".into());
+        assert!(volume_id_to_migrate(&profile, &[disk]).is_none());
     }
 
     #[test]

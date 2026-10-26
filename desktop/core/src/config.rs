@@ -446,11 +446,21 @@ fn atomic_write(path: &Path, data: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+            }
         }
     }
     let tmp = tmp_path(path);
     {
         let mut file = File::create(&tmp)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+        }
         file.write_all(data)?;
         file.sync_all()?;
     }
@@ -465,6 +475,11 @@ fn atomic_write(path: &Path, data: &[u8]) -> io::Result<()> {
             let _ = fs::remove_file(&tmp);
             return Err(e);
         }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
     }
     Ok(())
 }

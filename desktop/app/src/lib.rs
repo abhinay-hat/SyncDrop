@@ -686,7 +686,22 @@ fn on_volume(app: &AppHandle, event: VolumeEvent) {
                 .iter()
                 .find(|profile| profile.id == profile_id)
                 .cloned();
-            if let Some(profile) = profile {
+            if let Some(mut profile) = profile {
+                // Migrate display-name profiles to a stable volume id on first match.
+                if profile
+                    .volume_id
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .is_none()
+                {
+                    let disks = volumes::list_mounted_disks();
+                    if let Some(id) = volumes::volume_id_to_migrate(&profile, &disks) {
+                        profile.volume_id = Some(id);
+                        let _ = lock(&state.store).set_active_profile(profile.clone());
+                        sync_targets(&state);
+                        remember(&state);
+                    }
+                }
                 let needs_folder = profile.dest_path.trim().is_empty() && !profile.is_google_drive_cloud();
                 if needs_folder {
                     show_settings(app);

@@ -26,5 +26,12 @@ rand = "0.8"
 # One-time macOS UserDefaults import (`defaults export` XML). Used on every OS so the conversion test runs in CI.
 plist = "1"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_WNet",
+    "Win32_Storage_FileSystem",
+] }
+
 [dev-dependencies]
 tempfile = "3"

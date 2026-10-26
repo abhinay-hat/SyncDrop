@@ -63,12 +63,14 @@ object UsbMountHelper {
     private fun findViaStorageScan(): MountedVolume? {
         val storageDir = File("/storage")
         val children = storageDir.listFiles() ?: return null
+        // Prefer UUID-shaped names (e.g. "XXXX-XXXX"). Never return an arbitrary first child.
+        val uuidShape = Regex("^[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}$")
         for (child in children) {
             val name = child.name
             if (name == "self" || name == "emulated") continue
+            if (!uuidShape.matches(name)) continue
             if (!child.isDirectory) continue
             if (!child.canRead()) continue
-            // Volume UUIDs typically look like "XXXX-XXXX".
             return MountedVolume(child.absolutePath, name)
         }
         return null

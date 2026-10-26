@@ -112,23 +112,31 @@ pub struct SystemMounter;
 
 impl Mounter for SystemMounter {
     fn mount(&self, request: &MountRequest) -> Result<(), NasError> {
-        let mut plan = plan_mount(host_os(), request);
-        if let Some(dir) = &plan.mount_point {
-            if let Err(err) = std::fs::create_dir_all(dir) {
-                log::warn!("nas mount dir missing ({err}); trying open smb://");
-                return match plan.fallback.take() {
-                    Some(fallback) => run_plan(&fallback),
-                    None => Err(NasError::MountFailed { status: -1 }),
-                };
-            }
+        // Windows: WNetAddConnection2W keeps the password out of process argv.
+        #[cfg(windows)]
+        {
+            return mount_windows_wnet(request);
         }
-        match run_plan(&plan) {
-            Ok(()) => Ok(()),
-            Err(NasError::AuthenticationFailed) => Err(NasError::AuthenticationFailed),
-            Err(err) => match plan.fallback.take() {
-                Some(fallback) => run_plan(&fallback).or(Err(err)),
-                None => Err(err),
-            },
+        #[cfg(not(windows))]
+        {
+            let mut plan = plan_mount(host_os(), request);
+            if let Some(dir) = &plan.mount_point {
+                if let Err(err) = std::fs::create_dir_all(dir) {
+                    log::warn!("nas mount dir missing ({err}); trying open smb://");
+                    return match plan.fallback.take() {
+                        Some(fallback) => run_plan(&fallback),
+                        None => Err(NasError::MountFailed { status: -1 }),
+                    };
+                }
+            }
+            match run_plan(&plan) {
+                Ok(()) => Ok(()),
+                Err(NasError::AuthenticationFailed) => Err(NasError::AuthenticationFailed),
+                Err(err) => match plan.fallback.take() {
+                    Some(fallback) => run_plan(&fallback).or(Err(err)),
+                    None => Err(err),
+                },
+            }
         }
     }
 }
@@ -293,14 +301,14 @@ fn plan_mount(os: OsKind, request: &MountRequest) -> MountPlan {
     match os {
         OsKind::Macos => {
             let mount_point = macos_mount_point(&request.share);
-            let spec = smbfs_spec(request, false);
-            let redacted_spec = smbfs_spec(request, true);
-            // `open` has no silent password channel. Omit the secret so it is not on the command line.
+            // Never put the NAS password on argv (visible in ps). Username stays;
+            // the OS may prompt or use its own keychain. Windows uses WNet instead.
+            let spec = smbfs_spec_without_password(request);
             let open_url = guest_smb_url(request);
             MountPlan {
                 program: "mount_smbfs",
-                args: vec![spec, mount_point.display().to_string()],
-                redacted: vec![redacted_spec, mount_point.display().to_string()],
+                args: vec![spec.clone(), mount_point.display().to_string()],
+                redacted: vec![spec, mount_point.display().to_string()],
                 mount_point: Some(mount_point),
                 fallback: Some(Box::new(MountPlan {
                     program: "open",
@@ -312,27 +320,24 @@ fn plan_mount(os: OsKind, request: &MountRequest) -> MountPlan {
             }
         }
         OsKind::Linux => {
-            let url = smb_url(request, false);
-            let redacted = smb_url(request, true);
+            let url = smb_url_without_password(request);
             MountPlan {
                 program: "gio",
-                args: vec!["mount".to_string(), url],
-                redacted: vec!["mount".to_string(), redacted],
+                args: vec!["mount".to_string(), url.clone()],
+                redacted: vec!["mount".to_string(), url],
                 mount_point: None,
                 fallback: None,
             }
         }
         OsKind::Windows => {
+            // Real mounts use WNetAddConnection2W (see mount_windows_wnet). This plan is
+            // only for tests / redacted logging and never puts the password on argv.
             let unc = format!(r"\\{}\{}", request.host, request.share);
             let mut args = vec!["use".to_string(), unc];
             let mut redacted = args.clone();
             if let Some(user) = request.username.as_deref().filter(|user| !user.is_empty()) {
                 args.push(format!("/user:{user}"));
                 redacted.push(format!("/user:{user}"));
-                if let Some(password) = request.password.as_deref().filter(|pw| !pw.is_empty()) {
-                    args.push(password.to_string());
-                    redacted.push(PASSWORD_MARK.to_string());
-                }
             }
             MountPlan {
                 program: "net",
@@ -370,38 +375,20 @@ fn share_dir_name(share: &str) -> String {
     }
 }
 
-fn smbfs_spec(request: &MountRequest, redact: bool) -> String {
-    match (
-        request.username.as_deref().filter(|user| !user.is_empty()),
-        request.password.as_deref().filter(|pw| !pw.is_empty()),
-    ) {
-        (Some(user), Some(password)) => {
-            let pw = if redact {
-                PASSWORD_MARK.to_string()
-            } else {
-                encode_userinfo(password)
-            };
-            format!(
-                "//{}:{}@{}/{}",
-                encode_userinfo(user),
-                pw,
-                request.host,
-                encode_userinfo(&request.share)
-            )
-        }
-        (Some(user), None) => format!(
+fn smbfs_spec_without_password(request: &MountRequest) -> String {
+    match request.username.as_deref().filter(|user| !user.is_empty()) {
+        Some(user) => format!(
             "//{}@{}/{}",
             encode_userinfo(user),
             request.host,
             encode_userinfo(&request.share)
         ),
-        _ => format!("//{}/{}", request.host, encode_userinfo(&request.share)),
+        None => format!("//{}/{}", request.host, encode_userinfo(&request.share)),
     }
 }
 
-fn smb_url(request: &MountRequest, redact: bool) -> String {
-    let spec = smbfs_spec(request, redact);
-    format!("smb:{spec}")
+fn smb_url_without_password(request: &MountRequest) -> String {
+    format!("smb:{}", smbfs_spec_without_password(request))
 }
 
 fn guest_smb_url(request: &MountRequest) -> String {
@@ -427,6 +414,70 @@ fn encode_userinfo(value: &str) -> String {
         }
     }
     out
+}
+
+/// Mount an SMB share via `WNetAddConnection2W` so the password never appears on argv.
+#[cfg(windows)]
+fn mount_windows_wnet(request: &MountRequest) -> Result<(), NasError> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{ERROR_ALREADY_ASSIGNED, ERROR_DEVICE_ALREADY_REMEMBERED, ERROR_SUCCESS, NO_ERROR};
+    use windows_sys::Win32::NetworkManagement::WNet::{
+        WNetAddConnection2W, NETRESOURCEW, RESOURCETYPE_DISK, RESOURCE_GLOBALNET,
+    };
+
+    fn wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let unc = format!(r"\\{}\{}", request.host, request.share);
+    let mut remote = wide(&unc);
+    let mut user = request
+        .username
+        .as_deref()
+        .filter(|u| !u.is_empty())
+        .map(wide);
+    let mut password = request
+        .password
+        .as_deref()
+        .filter(|p| !p.is_empty())
+        .map(wide);
+
+    let mut resource = NETRESOURCEW {
+        dwScope: RESOURCE_GLOBALNET,
+        dwType: RESOURCETYPE_DISK,
+        dwDisplayType: 0,
+        dwUsage: 0,
+        lpLocalName: std::ptr::null_mut(),
+        lpRemoteName: remote.as_mut_ptr(),
+        lpComment: std::ptr::null_mut(),
+        lpProvider: std::ptr::null_mut(),
+    };
+
+    let user_ptr = user
+        .as_mut()
+        .map(|v| v.as_mut_ptr())
+        .unwrap_or(std::ptr::null_mut());
+    let pass_ptr = password
+        .as_mut()
+        .map(|v| v.as_mut_ptr())
+        .unwrap_or(std::ptr::null_mut());
+
+    // CONNECT flags: 0 = temporary connection for this logon session.
+    let status = unsafe { WNetAddConnection2W(&mut resource, pass_ptr, user_ptr, 0) };
+    match status {
+        NO_ERROR | ERROR_SUCCESS | ERROR_ALREADY_ASSIGNED | ERROR_DEVICE_ALREADY_REMEMBERED => {
+            log::info!("nas mount succeeded (WNetAddConnection2W)");
+            Ok(())
+        }
+        code => {
+            let err = classify_failure(code as i32, &format!("WNetAddConnection2W status {code}"));
+            log::warn!("nas mount failed WNetAddConnection2W ({err})");
+            Err(err)
+        }
+    }
 }
 
 fn run_plan(plan: &MountPlan) -> Result<(), NasError> {
@@ -748,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn command_lines_hide_the_password() {
+    fn command_lines_never_include_the_password() {
         let request = MountRequest {
             host: "nas.local".into(),
             share: "Backups".into(),
@@ -758,15 +809,17 @@ mod tests {
         for os in [OsKind::Macos, OsKind::Linux, OsKind::Windows] {
             let plan = plan_mount(os, &request);
             let shown = plan.redacted.join(" ");
-            assert!(!shown.contains("s3cret"), "{shown}");
-            assert!(shown.contains(PASSWORD_MARK), "{shown}");
             let real = plan.args.join(" ");
-            assert!(real.contains("s3cret"), "{real}");
+            assert!(!shown.contains("s3cret"), "{shown}");
+            assert!(!real.contains("s3cret"), "{real}");
+            assert!(!shown.contains(PASSWORD_MARK), "{shown}");
         }
         let mac = plan_mount(OsKind::Macos, &request);
         assert_eq!(mac.program, "mount_smbfs");
+        assert!(mac.args[0].contains("abhinay@nas.local"));
         assert_eq!(mac.fallback.unwrap().program, "open");
         assert_eq!(plan_mount(OsKind::Linux, &request).program, "gio");
+        // Windows mounts via WNetAddConnection2W; the net-use plan never carries the password.
         let win = plan_mount(OsKind::Windows, &request);
         assert_eq!(win.program, "net");
         assert_eq!(win.args[1], r"\\nas.local\Backups");

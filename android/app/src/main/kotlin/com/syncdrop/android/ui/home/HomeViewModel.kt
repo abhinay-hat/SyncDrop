@@ -72,7 +72,7 @@ class HomeViewModel @Inject constructor(
         val mount = uiState.value.usbMountPath
         val destPath = if (profile.destPath.startsWith("content://")) {
             profile.destPath
-        } else if (mount != null && !profile.destPath.startsWith(mount)) {
+        } else if (mount != null && !isUnderMount(profile.destPath, mount)) {
             "$mount/" + profile.destPath.substringAfterLast('/').ifBlank { "SyncDrop" }
         } else {
             profile.destPath
@@ -82,5 +82,14 @@ class HomeViewModel @Inject constructor(
 
     fun refreshUsb() {
         UsbConnectionState.refresh(getApplication())
+    }
+
+    companion object {
+        /** True when [path] is [mount] or a descendant, not a sibling with a shared prefix. */
+        internal fun isUnderMount(path: String, mount: String): Boolean {
+            if (path == mount) return true
+            val prefix = if (mount.endsWith("/")) mount else "$mount/"
+            return path.startsWith(prefix)
+        }
     }
 }

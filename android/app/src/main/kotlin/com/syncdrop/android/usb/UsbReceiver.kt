@@ -14,7 +14,8 @@ import android.util.Log
 class UsbReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
+        // Only the USB attach/detach actions are accepted (exported=false; still validate).
+        when (val action = intent.action) {
             UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                 val device: UsbDevice? = if (android.os.Build.VERSION.SDK_INT >= 33) {
                     intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
@@ -22,8 +23,12 @@ class UsbReceiver : BroadcastReceiver() {
                     @Suppress("DEPRECATION")
                     intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
                 }
-                val isStorage = device != null && UsbDeviceChecker.isMassStorage(device)
-                Log.d(TAG, "USB attached: ${device?.deviceName} massStorage=$isStorage")
+                if (device == null) {
+                    Log.w(TAG, "Ignoring USB_DEVICE_ATTACHED without EXTRA_DEVICE")
+                    return
+                }
+                val isStorage = UsbDeviceChecker.isMassStorage(device)
+                Log.d(TAG, "USB attached: ${device.deviceName} massStorage=$isStorage")
                 if (isStorage) {
                     UsbConnectionState.notifyChanged(context, attached = true)
                 }
@@ -33,6 +38,8 @@ class UsbReceiver : BroadcastReceiver() {
                 Log.d(TAG, "USB detached")
                 UsbConnectionState.notifyChanged(context, attached = false)
             }
+
+            else -> Log.w(TAG, "Ignoring unexpected action: $action")
         }
     }
 

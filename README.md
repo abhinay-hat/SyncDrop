@@ -67,9 +67,12 @@ The builds are not signed yet, so each OS warns you once.
 - **Linux AppImage:** `chmod +x SyncDrop_0.1.0_amd64.AppImage`, then run it. On Ubuntu 22.04 and later you may need `sudo apt install libfuse2` first.
 - **Android:** Android 8.0 or later. The release APK is built with `assembleRelease` (not debuggable) and signed with the Android debug keystore in CI so it installs without a Play Store key. Allow your browser or file manager to install unknown apps when Android asks. You need a USB OTG adapter or a USB-C drive.
 
-**Known issues in v0.1.0**
+**Known issues in v0.1.0** (fixed on main for 0.1.1)
 
-- Saved network share passwords and the Google Drive sign-in were not stored in the OS keychain in the published v0.1.0 build (they used an in-memory store and were lost on quit). Fixed on main, in the next release. External drives and guest shares were not affected.
+- Saved network share passwords and the Google Drive sign-in were not stored in the OS keychain in the published v0.1.0 build (they used an in-memory store and were lost on quit). Fixed; secret storage uses the OS keychain.
+- Windows network-share mounts put the password on the `net use` command line. Fixed; mounts use `WNetAddConnection2W`.
+- Volume matching used display name only. Fixed; profiles store a stable volume id when the OS provides one, with name fallback and migration on first match.
+- Google OAuth loopback accepted the first TCP client. Fixed; the listener keeps accepting until a request with the correct `state` arrives (or times out), bound to `127.0.0.1` only.
 
 ## Features
 
