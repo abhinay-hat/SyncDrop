@@ -4,7 +4,7 @@
 
 # SyncDrop
 
-**OneDrive for your own hardware — auto-sync the folders you choose to any drive you plug in, the moment it connects.**
+**OneDrive for your own hardware: auto-sync the folders you choose to any drive you plug in, the moment it connects.**
 
 [![Download](https://img.shields.io/badge/Download-latest%20release-2E7DF6?style=for-the-badge)](https://github.com/abhinay-hat/SyncDrop/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1FB6C9.svg?style=for-the-badge)](LICENSE)
@@ -23,10 +23,18 @@ SyncDrop is a tray app for macOS (menu bar), Windows, and Linux (system tray), p
 
 The desktop copy engine is Rust. It does not shell out to rsync.
 
+> **Early release (v0.1.0).** Expect rough edges. Try it first on a folder you have another copy of, and [tell me what breaks](#feedback).
+
+| | macOS | Windows | Linux | Android |
+|--|:--:|:--:|:--:|:--:|
+| External drive (USB, SSD, SD card) | yes | yes | yes | yes, over USB OTG |
+| Network share (SMB) | yes | yes | yes | not yet |
+| Google Drive | yes | yes | yes | not yet |
+
 ## Quick start
 
 1. Add a profile.
-2. Pick the target — **External drive**, **Network share**, or **Google Drive** — then the source folder and the destination.
+2. Pick the target (**External drive**, **Network share**, or **Google Drive**), then the source folder and the destination.
 3. Turn on **Auto-sync**.
 
 ## Download
@@ -43,11 +51,25 @@ Installers for the current release are on **[GitHub Releases](https://github.com
 | Android | [`SyncDrop-android-v0.1.0.apk`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop-android-v0.1.0.apk) |
 
 
+Not sure which Mac you have? Apple menu > **About This Mac**. "Apple M1/M2/M3/M4" means Apple silicon; "Intel" means Intel.
+
 **Install notes**
 
-- **macOS unsigned:** right-click the app → **Open**, or run `xattr -dr com.apple.quarantine` on it.
-- **Windows SmartScreen:** **More info > Run anyway**.
-- **Linux AppImage:** `chmod +x` the file before launching it.
+The builds are not signed yet, so each OS warns you once.
+
+- **macOS:** open the `.dmg` and drag SyncDrop to **Applications**. macOS will say the app "is damaged" or "cannot be verified". It is not damaged, it is unsigned. Run this once in Terminal, then open it normally:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/SyncDrop.app
+  ```
+  SyncDrop lives in the menu bar, not the Dock.
+- **Windows:** SmartScreen shows "Windows protected your PC". Click **More info > Run anyway**.
+- **Linux deb:** `sudo apt install ./SyncDrop_0.1.0_amd64.deb`
+- **Linux AppImage:** `chmod +x SyncDrop_0.1.0_amd64.AppImage`, then run it. On Ubuntu 22.04 and later you may need `sudo apt install libfuse2` first.
+- **Android:** Android 8.0 or later. This is a debug build, so allow your browser or file manager to install unknown apps when Android asks. You need a USB OTG adapter or a USB-C drive.
+
+**Known issues in v0.1.0**
+
+- Saved network share passwords and the Google Drive sign-in were not stored in the OS keychain in the published v0.1.0 build (they used an in-memory store and were lost on quit). Fixed on main, in the next release. External drives and guest shares were not affected.
 
 ## Features
 
@@ -59,8 +81,8 @@ Installers for the current release are on **[GitHub Releases](https://github.com
 | **Copy or Exact mirror** | Copy adds and updates. Exact mirror also deletes destination files that are not in the source. |
 | **Versions** | With Keep versions on, replaced and deleted files move to `.syncdrop-versions/<YYYY-MM-DD_HHMMSS>/` on the destination. |
 | **Exclude globs** | Skip names such as `.DS_Store` and `node_modules`. |
-| **Network share** | SMB host, share, and username. Auto-mount retries about once a minute. The password stays in the OS keychain. |
-| **Google Drive** | OAuth upload with your own client id. Create a Desktop OAuth client, enable the Drive API, paste the redirect URI, then save the client id and secret and sign in. Secret and tokens stay in the keychain. [Google Cloud credentials](https://console.cloud.google.com/apis/credentials). |
+| **Network share** | SMB host, share, and username. Auto-mount retries about once a minute. The password stays in the OS keychain (fixed on main, in the next release). |
+| **Google Drive** | OAuth upload with your own client id. In [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), enable the Drive API and create an OAuth client of type **Desktop app** (no redirect URI to configure). Save the client id and secret in SyncDrop, then sign in. Secret and tokens stay in the OS keychain (fixed on main, in the next release). |
 | **Auto-eject** | After a successful sync, eject the drive. The popup then says **Safe to unplug**. |
 | **History and logs** | Recent runs in the Activity tab. Daily log files (prefix `syncdrop`, seven kept) live in the logs directory below. |
 | **Notifications** | Optional system notification when a sync finishes. |
@@ -81,7 +103,7 @@ Installers for the current release are on **[GitHub Releases](https://github.com
 
 ## Build from source
 
-Rust and `tauri-cli` ^2. On Linux: `sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Windows needs WebView2.
+Rust and `tauri-cli` ^2 (`cargo install tauri-cli --version "^2" --locked`). On Linux: `sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Windows needs WebView2.
 
 ```bash
 make desktop-run    # cargo run -p syncdrop
@@ -118,7 +140,16 @@ android/         # Jetpack Compose app (USB OTG, Room, WorkManager)
 - Signed and notarized release builds by default
 - Auto-update
 - More cloud targets
+- Network share and Google Drive on Android
 - Share the Rust core with the Android app
+
+## Feedback
+
+Found a bug, a missing feature, or a screen that made no sense? Please say so, bluntly.
+
+- **Bug:** [open a bug report](https://github.com/abhinay-hat/SyncDrop/issues/new?template=bug_report.md). Include your OS, the SyncDrop version, what you expected, and the last lines of the log (Activity tab > logs, or the logs folder under [Where data lives](#where-data-lives)).
+- **Idea or missing feature:** [open a feature request](https://github.com/abhinay-hat/SyncDrop/issues/new?template=feature_request.md).
+- **Anything else:** [all issues](https://github.com/abhinay-hat/SyncDrop/issues).
 
 ## Contributing
 
@@ -144,7 +175,7 @@ See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
 #### Automated releases (GitHub Actions)
 
-`make release` prints the tag and push commands. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds desktop installers and the Android debug APK and attaches them to a GitHub Release. 
+`make release` prints the tag and push commands. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds desktop installers and the Android debug APK and attaches them to a GitHub Release.
 
 ```bash
 make release
