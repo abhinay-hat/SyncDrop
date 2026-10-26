@@ -405,6 +405,16 @@ function paintForm() {
   setChecked("auto-sync", !!profile.autoSync);
   setChecked("auto-eject", !!profile.autoEject);
   setChecked("keep-versions", !!profile.keepVersions);
+  setChecked("respect-gitignore", profile.respectGitignore !== false);
+  setChecked("skip-deps", profile.skipDependencyCaches !== false);
+  setChecked("keep-git", profile.keepGit !== false);
+  const cleanupStatus = document.getElementById("cleanup-status");
+  const cleanupApply = document.getElementById("cleanup-apply");
+  if (cleanupStatus) {
+    cleanupStatus.hidden = true;
+    cleanupStatus.textContent = "";
+  }
+  if (cleanupApply) cleanupApply.hidden = true;
   const target = targetOf(profile);
   document.querySelectorAll('input[name="target"]').forEach((input) => {
     input.checked = input.value === target;
@@ -526,6 +536,9 @@ function profileFromForm() {
   profile.autoSync = checked("auto-sync");
   profile.autoEject = target === "drive" && checked("auto-eject");
   profile.keepVersions = target !== "google" && checked("keep-versions");
+  profile.respectGitignore = checked("respect-gitignore");
+  profile.skipDependencyCaches = checked("skip-deps");
+  profile.keepGit = checked("keep-git");
   profile.excludes = excludes.slice();
   if (target === "google") {
     const folder = document.getElementById("gfolder").value.trim() || "SyncDrop";
@@ -800,7 +813,54 @@ document.querySelectorAll("input, select").forEach((el) => {
   el.addEventListener("change", touch);
 });
 
-["auto-sync", "auto-eject", "keep-versions", "auto-mount"].forEach((id) => wireSwitch(id));
+["auto-sync", "auto-eject", "keep-versions", "auto-mount", "respect-gitignore", "skip-deps", "keep-git"].forEach((id) => wireSwitch(id));
+
+let pendingCleanup = null;
+document.getElementById("cleanup-scan").onclick = async () => {
+  const profile = selected();
+  if (!profile) return;
+  const status = document.getElementById("cleanup-status");
+  const apply = document.getElementById("cleanup-apply");
+  status.hidden = false;
+  status.textContent = "Scanning…";
+  apply.hidden = true;
+  pendingCleanup = null;
+  try {
+    const plan = await invoke("cleanup_plan", { profileId: profile.id });
+    pendingCleanup = plan;
+    const n = (plan.targets || []).length;
+    const size = bytes(plan.totalBytes || 0);
+    status.textContent = n
+      ? `Found ${n.toLocaleString()} cache folder${n === 1 ? "" : "s"} · ${size}`
+      : "No dependency or cache folders found on the destination.";
+    apply.hidden = n === 0;
+  } catch (err) {
+    status.textContent = String(err);
+    toast(String(err), true);
+  }
+};
+document.getElementById("cleanup-apply").onclick = async () => {
+  const profile = selected();
+  if (!profile || !pendingCleanup || !(pendingCleanup.targets || []).length) return;
+  const n = pendingCleanup.targets.length;
+  const size = bytes(pendingCleanup.totalBytes || 0);
+  const choice = await openDialog({
+    title: "Clean up drive",
+    body: `Delete ${n.toLocaleString()} dependency/cache folder${n === 1 ? "" : "s"} (${size}) from this profile's destination? This cannot be undone.`,
+    ok: "Delete caches",
+    danger: true,
+  });
+  if (choice !== "ok") return;
+  try {
+    await invoke("cleanup_apply", { profileId: profile.id });
+    pendingCleanup = null;
+    document.getElementById("cleanup-apply").hidden = true;
+    document.getElementById("cleanup-status").textContent = "Caches deleted.";
+    toast("Destination cleaned");
+  } catch (err) {
+    toast(String(err), true);
+  }
+};
 wireSwitch("notify", (value) => {
   invoke("set_notify_on_complete", { value }).catch((err) => toast(String(err), true));
 });

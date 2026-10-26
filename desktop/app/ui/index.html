@@ -199,14 +199,30 @@
             <button id="keep-versions" type="button" class="switch" role="switch" aria-checked="false" aria-describedby="keep-versions-help">Keep versions</button>
             <p id="keep-versions-help" class="help">Move replaced files into .syncdrop-versions.</p>
           </div>
+          <h2>Smart ignore</h2>
+          <button id="respect-gitignore" type="button" class="switch" role="switch" aria-checked="true" aria-describedby="respect-gitignore-help">Respect .gitignore</button>
+          <p id="respect-gitignore-help" class="help">Honour .gitignore, .ignore, and .git/info/exclude at every level.</p>
+          <button id="skip-deps" type="button" class="switch" role="switch" aria-checked="true" aria-describedby="skip-deps-help">Skip dependency and cache folders</button>
+          <p id="skip-deps-help" class="help">Skip node_modules, target (next to Cargo.toml), .venv, .next, and similar caches.</p>
+          <button id="keep-git" type="button" class="switch" role="switch" aria-checked="true" aria-describedby="keep-git-help">Keep .git folders</button>
+          <p id="keep-git-help" class="help">Copy .git so repositories stay restorable. Turn off to skip them.</p>
           <h2>Skip</h2>
-          <p class="help">One glob per chip. A name matches anywhere in the tree, for example <span class="example">*.tmp</span> or <span class="example">node_modules</span>.</p>
+          <p class="help">One glob per chip. A name matches anywhere in the tree, for example <span class="example">*.tmp</span> or <span class="example">node_modules</span>. Applied on top of smart ignore.</p>
           <div id="chips" class="chips"></div>
           <div class="row">
             <input id="exclude-input" type="text" placeholder="e.g. *.tmp" spellcheck="false" autocomplete="off">
             <button id="add-exclude" type="button">Add</button>
           </div>
           <p class="field-error" data-for="excludes"></p>
+          <div data-target="drive nas">
+            <h2>Clean up drive</h2>
+            <p class="help">Find dependency and cache folders already on this profile's destination, then delete them after you confirm.</p>
+            <p id="cleanup-status" class="help" hidden></p>
+            <div class="actions">
+              <button id="cleanup-scan" type="button">Scan for caches</button>
+              <button id="cleanup-apply" type="button" class="danger" hidden>Delete found caches</button>
+            </div>
+          </div>
         </section>
 
         <section id="activity" class="panel" role="tabpanel" aria-labelledby="tab-activity" hidden>

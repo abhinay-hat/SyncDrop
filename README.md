@@ -80,10 +80,16 @@ The builds are not signed yet, so each OS warns you once.
 |---------|--------------|
 | **Auto-sync on connect** | Each profile can start a sync when its drive or share connects. |
 | **Multiple profiles** | Each profile has its own source, target, and rules, and is watched on its own. |
-| **Preview** | Preview lists copies, updates, and deletes. Exact mirror always previews before it writes and shows the delete count. Google Drive has no local preview; Sync now uploads changed files. |
+| **Plan first** | On connect and on Sync Now, SyncDrop scans first and shows copies, updates, deletes, bytes to copy, and bytes skipped. Auto-sync continues after the plan unless it exceeds the profile threshold (default 5 GB or 20k files). |
+| **Smart ignore** | Per-profile toggles (on by default): respect `.gitignore` / `.ignore` / `.git/info/exclude`, and skip dependency/cache folders (`node_modules`, `target` next to `Cargo.toml`, `.venv`, `.next`, and similar). `.git` is kept by default so repos stay restorable. User exclude globs still apply on top. |
+| **Fast index** | After a successful sync, `<dest>/.syncdrop/index-<profileId>.json` stores size and mtime so the next plan can skip unchanged files without re-statting the destination. |
+| **RESTORE.md** | Lockfiles are always copied. SyncDrop writes `<dest>/.syncdrop/RESTORE.md` with reinstall commands (`npm ci`, `pnpm i --frozen-lockfile`, `cargo fetch`, and so on) instead of copying dependency trees. |
+| **Clean up drive** | Settings action that finds the same dependency/cache folders already on the destination, shows total size, and deletes them only after confirmation. |
+| **CLI** | `syncdrop-cli plan\|sync\|cleanup --profile <name>` reads the same `config.json` as the app (`~/Library/Application Support/SyncDrop/` on macOS). |
+| **Preview** | Preview lists copies, updates, and deletes, plus byte totals. Google Drive has no local preview; Sync now uploads changed files. |
 | **Copy or Exact mirror** | Copy adds and updates. Exact mirror also deletes destination files that are not in the source. |
 | **Versions** | With Keep versions on, replaced and deleted files move to `.syncdrop-versions/<YYYY-MM-DD_HHMMSS>/` on the destination. |
-| **Exclude globs** | Skip names such as `.DS_Store` and `node_modules`. |
+| **Exclude globs** | Extra skip patterns on top of smart ignore. |
 | **Network share** | SMB host, share, and username. Auto-mount retries about once a minute. The password stays in the OS keychain (fixed on main, in the next release). |
 | **Google Drive** | OAuth upload with your own client id. In [Google Cloud credentials](https://console.cloud.google.com/apis/credentials), enable the Drive API and create an OAuth client of type **Desktop app** (no redirect URI to configure). Save the client id and secret in SyncDrop, then sign in. Secret and tokens stay in the OS keychain (fixed on main, in the next release). |
 | **Auto-eject** | After a successful sync, eject the drive. The popup then says **Safe to unplug**. |
@@ -112,6 +118,15 @@ Rust and `tauri-cli` ^2 (`cargo install tauri-cli --version "^2" --locked`). On 
 make desktop-run    # cargo run -p syncdrop
 make desktop-test   # cargo test in desktop/
 make desktop        # cargo tauri build in desktop/app
+make desktop-cli    # release build of syncdrop-cli
+```
+
+CLI examples (same profiles as the menu bar app):
+
+```bash
+cargo run -p syncdrop-cli -- plan --profile Default
+cargo run -p syncdrop-cli -- sync --profile Default --yes
+cargo run -p syncdrop-cli -- cleanup --profile Default --dry-run
 ```
 
 Android:

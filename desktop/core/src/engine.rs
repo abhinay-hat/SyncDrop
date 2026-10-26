@@ -18,6 +18,9 @@ use walkdir::WalkDir;
 
 use crate::profile::SyncProfile;
 use crate::progress::SyncRecord;
+use crate::restore;
+use crate::smart_ignore::SmartIgnore;
+use crate::sync_index::{SyncIndex, SYNCDROP_META_DIR};
 
 /// rsync `--modify-window=1`. mtimes within this window count as equal.
 pub const MODIFY_WINDOW: Duration = Duration::from_secs(1);
@@ -37,12 +40,38 @@ const TMP_SUFFIX: &str = ".syncdrop-tmp";
 /// What a real sync would change. Paths are relative, `/`-separated.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Plan {
-    /// In source, missing at dest.
+    /// In source, missing at dest (or missing from the sync index).
     pub copies: Vec<String>,
     /// In both, but size differs or mtime differs by more than [`MODIFY_WINDOW`].
     pub updates: Vec<String>,
     /// In dest only. Populated when `mirror_mode` is set. Excludes are never listed.
     pub deletes: Vec<String>,
+    /// Total bytes that would be copied (copies + updates).
+    pub bytes_to_copy: u64,
+    /// Bytes skipped by smart ignore / user excludes during the source walk.
+    pub bytes_skipped: u64,
+    /// File count skipped by ignores (not dirs).
+    pub files_skipped: u64,
+}
+
+impl Plan {
+    /// True when auto-sync should ask before copying.
+    pub fn needs_confirmation(&self, profile: &SyncProfile) -> bool {
+        let files = (self.copies.len() + self.updates.len()) as u64;
+        self.bytes_to_copy > profile.confirm_bytes_threshold
+            || files > profile.confirm_files_threshold
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "{} to copy, {} to update, {} to delete; {} bytes to copy, {} bytes skipped",
+            self.copies.len(),
+            self.updates.len(),
+            self.deletes.len(),
+            self.bytes_to_copy,
+            self.bytes_skipped
+        )
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -69,6 +98,8 @@ pub enum EngineError {
 
 struct Built {
     plan: Plan,
+    /// All non-ignored source files (relative). Used to refresh the index and RESTORE.md.
+    source_files: Vec<String>,
     /// Dest leftovers from an unplugged copy. Removed on a real sync, omitted from [`Plan`].
     stale_tmps: Vec<String>,
 }
@@ -96,6 +127,7 @@ where
     let started = Instant::now();
     let built = build(profile, dest, Some(cancel))?;
     let (files_done, bytes_done) = execute(profile, dest, &built, &mut progress, cancel)?;
+    write_post_sync_meta(profile, dest, &built.source_files)?;
     Ok(SyncRecord::new(
         chrono::Utc::now(),
         files_done,
@@ -103,6 +135,23 @@ where
         started.elapsed().as_secs_f64(),
         true,
     ))
+}
+
+fn write_post_sync_meta(
+    profile: &SyncProfile,
+    dest: &Path,
+    source_files: &[String],
+) -> Result<(), EngineError> {
+    let source = PathBuf::from(profile.expanded_source_path());
+    let mut index = SyncIndex::new(profile.id);
+    for rel in source_files {
+        let meta = fs::metadata(source.join(rel))?;
+        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        index.insert_meta(rel.clone(), meta.len(), modified);
+    }
+    index.save(dest)?;
+    restore::write_restore_md(dest, source_files)?;
+    Ok(())
 }
 
 fn build(
@@ -132,8 +181,12 @@ fn build(
     check_cancel(cancel)?;
 
     let excludes = exclude_set(&profile.excludes)?;
+    let mut smart = SmartIgnore::new(&source, profile.ignore_options());
+    let index = SyncIndex::load(dest, profile.id);
     let mut files: Vec<String> = Vec::new();
     let mut source_paths: HashSet<String> = HashSet::new();
+    let mut bytes_skipped: u64 = 0;
+    let mut files_skipped: u64 = 0;
 
     let mut walker = WalkDir::new(&source)
         .min_depth(1)
@@ -143,14 +196,29 @@ fn build(
         check_cancel(cancel)?;
         let entry = item.map_err(walk_err)?;
         let rel = rel_of(&source, entry.path())?;
-        if is_excluded(&excludes, &rel) {
-            if entry.file_type().is_dir() {
+        let is_dir = entry.file_type().is_dir();
+        let skipped = is_excluded(&excludes, &rel)
+            || smart.is_ignored(entry.path(), &rel, is_dir);
+        if skipped {
+            if entry.file_type().is_file() {
+                files_skipped += 1;
+                if let Ok(meta) = entry.metadata() {
+                    bytes_skipped += meta.len();
+                }
+            } else if is_dir {
+                // Approximate skipped dir bytes cheaply: one metadata walk of that subtree.
+                if let Ok((b, f)) = dir_skipped_stats(entry.path()) {
+                    bytes_skipped += b;
+                    files_skipped += f;
+                }
+            }
+            if is_dir {
                 walker.skip_current_dir();
             }
             continue;
         }
         source_paths.insert(rel.clone());
-        if entry.file_type().is_dir() {
+        if is_dir {
             continue;
         }
         // ponytail: symlinks and specials are skipped. Upgrade path is copy-the-link if a profile needs them.
@@ -162,17 +230,30 @@ fn build(
 
     let mut copies = Vec::new();
     let mut updates = Vec::new();
+    let mut bytes_to_copy: u64 = 0;
     for rel in &files {
         check_cancel(cancel)?;
         let src_meta = fs::metadata(source.join(rel))?;
+        let src_mtime = src_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        let src_len = src_meta.len();
+
         let dest_file = dest.join(rel);
+        // Fast path: index says unchanged and dest still exists → skip dest metadata.
+        if let Some(idx) = index.as_ref() {
+            if idx.matches(rel, src_len, src_mtime) && dest_file.is_file() {
+                continue;
+            }
+        }
+
         if dest_file.is_file() {
             let dest_meta = fs::metadata(&dest_file)?;
             if content_differs(&src_meta, &dest_meta) {
                 updates.push(rel.clone());
+                bytes_to_copy += src_len;
             }
         } else {
             copies.push(rel.clone());
+            bytes_to_copy += src_len;
         }
     }
 
@@ -191,7 +272,7 @@ fn build(
                 stale_tmps.push(rel);
                 continue;
             }
-            if is_excluded(&excludes, &rel) {
+            if is_excluded(&excludes, &rel) || is_meta_path(&rel) {
                 protect(&mut protected, &rel);
                 if entry.file_type().is_dir() {
                     dwalker.skip_current_dir();
@@ -213,9 +294,31 @@ fn build(
             copies,
             updates,
             deletes,
+            bytes_to_copy,
+            bytes_skipped,
+            files_skipped,
         },
+        source_files: files,
         stale_tmps,
     })
+}
+
+fn dir_skipped_stats(dir: &Path) -> io::Result<(u64, u64)> {
+    let mut bytes = 0u64;
+    let mut files = 0u64;
+    for item in WalkDir::new(dir).follow_links(false) {
+        let entry = item.map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        if entry.file_type().is_file() {
+            files += 1;
+            bytes += entry.metadata()?.len();
+        }
+    }
+    Ok((bytes, files))
+}
+
+fn is_meta_path(rel: &str) -> bool {
+    let first = rel.split('/').next().unwrap_or(rel);
+    first == VERSIONS_DIR || first == LEGACY_VERSIONS_DIR || first == SYNCDROP_META_DIR
 }
 
 fn execute<F>(
@@ -473,6 +576,7 @@ fn exclude_set(patterns: &[String]) -> Result<GlobSet, EngineError> {
     };
     add(VERSIONS_DIR)?;
     add(LEGACY_VERSIONS_DIR)?;
+    add(SYNCDROP_META_DIR)?;
     for raw in patterns {
         let pattern = raw.trim();
         if pattern.is_empty() {
@@ -937,5 +1041,94 @@ mod tests {
             dry_run(&p, src.path()),
             Err(EngineError::Overlapping)
         ));
+    }
+
+    #[test]
+    fn smart_ignore_skips_node_modules_and_counts_bytes() {
+        let src = tempdir().unwrap();
+        let dst = tempdir().unwrap();
+        write(&src.path().join("app/index.js"), b"keep");
+        write(&src.path().join("app/node_modules/x/index.js"), b"skipme");
+        let mut p = profile(src.path(), &[], false, false);
+        p.excludes.clear();
+        p.skip_dependency_caches = true;
+        let plan = dry_run(&p, dst.path()).unwrap();
+        assert_eq!(plan.copies, vec!["app/index.js".to_string()]);
+        assert!(plan.bytes_skipped >= 6);
+        assert!(plan.files_skipped >= 1);
+        assert_eq!(plan.bytes_to_copy, 4);
+    }
+
+    #[test]
+    fn smart_ignore_skips_target_only_with_cargo_toml() {
+        let src = tempdir().unwrap();
+        let dst = tempdir().unwrap();
+        write(&src.path().join("crate/Cargo.toml"), b"[package]\nname=\"x\"\n");
+        write(&src.path().join("crate/target/debug/x"), b"bin");
+        write(&src.path().join("crate/src/lib.rs"), b"fn x(){}");
+        write(&src.path().join("other/target/note.txt"), b"keep");
+        let mut p = profile(src.path(), &[], false, false);
+        p.excludes.clear();
+        let plan = dry_run(&p, dst.path()).unwrap();
+        assert!(plan.copies.iter().any(|f| f == "crate/src/lib.rs"));
+        assert!(plan.copies.iter().any(|f| f == "other/target/note.txt"));
+        assert!(!plan.copies.iter().any(|f| f.contains("crate/target")));
+    }
+
+    #[test]
+    fn index_round_trip_skips_unchanged_on_second_plan() {
+        let src = tempdir().unwrap();
+        let dst = tempdir().unwrap();
+        write(&src.path().join("a.txt"), b"hello");
+        touch(&src.path().join("a.txt"), 1_700_000_000);
+        let mut p = profile(src.path(), &[], false, false);
+        p.excludes.clear();
+        let cancel = AtomicBool::new(false);
+        sync(&p, dst.path(), noop, &cancel).unwrap();
+        assert!(dst.path().join(".syncdrop").join(format!("index-{}.json", p.id)).is_file());
+        assert!(dst.path().join(".syncdrop").join("RESTORE.md").is_file());
+        let plan = dry_run(&p, dst.path()).unwrap();
+        assert!(plan.copies.is_empty() && plan.updates.is_empty());
+        assert_eq!(plan.bytes_to_copy, 0);
+    }
+
+    #[test]
+    fn needs_confirmation_uses_thresholds() {
+        let mut p = SyncProfile::new("t");
+        p.confirm_bytes_threshold = 100;
+        p.confirm_files_threshold = 2;
+        let small = Plan {
+            copies: vec!["a".into()],
+            bytes_to_copy: 50,
+            ..Plan::default()
+        };
+        assert!(!small.needs_confirmation(&p));
+        let big_bytes = Plan {
+            copies: vec!["a".into()],
+            bytes_to_copy: 101,
+            ..Plan::default()
+        };
+        assert!(big_bytes.needs_confirmation(&p));
+        let big_files = Plan {
+            copies: vec!["a".into(), "b".into(), "c".into()],
+            bytes_to_copy: 1,
+            ..Plan::default()
+        };
+        assert!(big_files.needs_confirmation(&p));
+    }
+
+    #[test]
+    fn restore_md_lists_lockfile_projects_after_sync() {
+        let src = tempdir().unwrap();
+        let dst = tempdir().unwrap();
+        write(&src.path().join("web/package-lock.json"), b"{}");
+        write(&src.path().join("web/index.js"), b"x");
+        let mut p = profile(src.path(), &[], false, false);
+        p.excludes.clear();
+        let cancel = AtomicBool::new(false);
+        sync(&p, dst.path(), noop, &cancel).unwrap();
+        let text = fs::read_to_string(dst.path().join(".syncdrop").join("RESTORE.md")).unwrap();
+        assert!(text.contains("npm ci"));
+        assert!(text.contains("`web`"));
     }
 }

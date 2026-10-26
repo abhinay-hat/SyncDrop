@@ -115,6 +115,14 @@ function showDry(dry) {
   heading.textContent = profile
     ? `${profile.name} → ${destinationName(profile)}`
     : "Preview";
+  const drySummary = document.getElementById("dry-summary");
+  if (drySummary) {
+    const copyBytes = bytes(dry.bytesToCopy || 0);
+    const skipBytes = bytes(dry.bytesSkipped || 0);
+    drySummary.textContent = dry.error
+      ? ""
+      : `${copyBytes} to copy · ${skipBytes} skipped by ignores`;
+  }
   const groups = [
     { key: "copies", title: "Copy", danger: false },
     { key: "updates", title: "Update", danger: false },
@@ -284,7 +292,7 @@ document.getElementById("retry").onclick = () => {
   invoke("get_state").then((state) => {
     const profile = profileFor(state);
     if (!profile) return;
-    invoke("sync_now", { profileId: profile.id, confirmed: !profile.mirrorMode });
+    invoke("sync_now", { profileId: profile.id, confirmed: false });
   });
 };
 document.getElementById("open-logs").onclick = () => {

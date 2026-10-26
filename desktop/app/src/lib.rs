@@ -211,7 +211,25 @@ struct DryRunView {
     copies: Vec<String>,
     updates: Vec<String>,
     deletes: Vec<String>,
+    bytes_to_copy: u64,
+    bytes_skipped: u64,
+    files_skipped: u64,
+    needs_confirmation: bool,
     error: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CleanupView {
+    targets: Vec<CleanupTargetView>,
+    total_bytes: u64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CleanupTargetView {
+    relative_path: String,
+    bytes: u64,
 }
 
 #[derive(Clone, Serialize)]
@@ -281,6 +299,8 @@ struct AppState {
     tray: Mutex<Option<TrayIcon>>,
     tray_title: Mutex<String>,
     dry_run: Mutex<Option<DryRunView>>,
+    /// After a plan finishes, auto-start sync unless the plan needs confirmation.
+    auto_continue: AtomicBool,
 }
 
 impl AppState {
@@ -310,6 +330,7 @@ impl AppState {
             tray: Mutex::new(None),
             tray_title: Mutex::new("idle".into()),
             dry_run: Mutex::new(None),
+            auto_continue: AtomicBool::new(false),
         })
     }
 }
@@ -360,6 +381,8 @@ pub fn run() {
             google_sign_out,
             sync_now,
             dry_run,
+            cleanup_plan,
+            cleanup_apply,
             cancel_sync,
             eject,
             clear_history,
@@ -616,16 +639,12 @@ fn spawn_tray_pump(app: AppHandle) {
 fn handle_menu(app: &AppHandle, id: &str) {
     match id {
         "sync-now" => {
-            let profile = lock(&app.state::<AppState>().store).active_profile().clone();
-            if profile.mirror_mode {
-                let _ = start_dry_run(app, profile.id);
-            } else {
-                let _ = start_sync(app, profile.id);
-            }
+            let id = lock(&app.state::<AppState>().store).active_profile_id();
+            let _ = start_dry_run(app, id, false);
         }
         "dry-run" => {
             let id = lock(&app.state::<AppState>().store).active_profile_id();
-            let _ = start_dry_run(app, id);
+            let _ = start_dry_run(app, id, false);
         }
         "eject" => {
             let id = lock(&app.state::<AppState>().store).active_profile_id();
@@ -706,7 +725,7 @@ fn on_volume(app: &AppHandle, event: VolumeEvent) {
                 if needs_folder {
                     show_settings(app);
                 } else if profile.auto_sync {
-                    let _ = start_sync(app, profile.id);
+                    let _ = start_dry_run(app, profile.id, true);
                     show_popup(app);
                 }
             }
@@ -1017,7 +1036,7 @@ fn finish_sync(
     emit_progress(app, &progress);
 }
 
-fn start_dry_run(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
+fn start_dry_run(app: &AppHandle, profile_id: Uuid, auto_continue: bool) -> Result<(), String> {
     let state = app.state::<AppState>();
     if state.syncing.load(Ordering::SeqCst) {
         return Err("A sync is already running.".into());
@@ -1037,17 +1056,23 @@ fn start_dry_run(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
     }
     log::info!("dry run started profile={}", profile.name);
     state.previewing.store(true, Ordering::SeqCst);
+    state.auto_continue.store(auto_continue, Ordering::SeqCst);
     *lock(&state.sync_profile) = Some(profile.id);
     *lock(&state.dry_run) = None;
     show_popup(app);
     let app2 = app.clone();
     let profile_key = profile.id.to_string();
+    let profile_id_copy = profile.id;
     if std::thread::Builder::new()
         .name("syncdrop-dry-run".into())
         .spawn(move || {
             let view = match dry_plan(&profile) {
                 Ok(plan) => DryRunView {
                     profile_id: profile_key,
+                    needs_confirmation: plan.needs_confirmation(&profile),
+                    bytes_to_copy: plan.bytes_to_copy,
+                    bytes_skipped: plan.bytes_skipped,
+                    files_skipped: plan.files_skipped,
                     copies: plan.copies,
                     updates: plan.updates,
                     deletes: plan.deletes,
@@ -1058,15 +1083,22 @@ fn start_dry_run(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
                     copies: Vec::new(),
                     updates: Vec::new(),
                     deletes: Vec::new(),
+                    bytes_to_copy: 0,
+                    bytes_skipped: 0,
+                    files_skipped: 0,
+                    needs_confirmation: false,
                     error: Some(err),
                 },
             };
             let state = app2.state::<AppState>();
+            let auto = state.auto_continue.swap(false, Ordering::SeqCst);
             log::info!(
-                "dry run finished copies={} updates={} deletes={} error={}",
+                "dry run finished copies={} updates={} deletes={} bytes={} skipped={} error={}",
                 view.copies.len(),
                 view.updates.len(),
                 view.deletes.len(),
+                view.bytes_to_copy,
+                view.bytes_skipped,
                 view.error.is_some()
             );
             *lock(&state.dry_run) = Some(view.clone());
@@ -1075,11 +1107,40 @@ fn start_dry_run(app: &AppHandle, profile_id: Uuid) -> Result<(), String> {
             *lock(&state.sync_profile) = None;
             state.menu_dirty.store(true, Ordering::SeqCst);
             let _ = app2.emit("dry-run", &view);
+            if view.error.is_none() {
+                let body = format!(
+                    "Plan: {} copy, {} update, {} delete; {} bytes to copy, {} skipped",
+                    view.copies.len(),
+                    view.updates.len(),
+                    view.deletes.len(),
+                    view.bytes_to_copy,
+                    view.bytes_skipped
+                );
+                notify_msg(&app2, &body);
+            }
+            if auto && view.error.is_none() {
+                if view.needs_confirmation {
+                    notify_msg(
+                        &app2,
+                        "Plan is large — confirm in the SyncDrop window before copying.",
+                    );
+                    show_popup(&app2);
+                } else if !view.copies.is_empty()
+                    || !view.updates.is_empty()
+                    || !view.deletes.is_empty()
+                {
+                    let app3 = app2.clone();
+                    let _ = app2.run_on_main_thread(move || {
+                        let _ = start_sync(&app3, profile_id_copy);
+                    });
+                }
+            }
         })
         .is_err()
     {
         state.syncing.store(false, Ordering::SeqCst);
         state.previewing.store(false, Ordering::SeqCst);
+        state.auto_continue.store(false, Ordering::SeqCst);
         *lock(&state.sync_profile) = None;
         return Err("Could not start dry run.".into());
     }
@@ -1360,9 +1421,8 @@ fn google_sign_out(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn sync_now(app: AppHandle, profile_id: String, confirmed: bool) -> Result<(), String> {
     let id = parse_id(profile_id)?;
-    let mirror = profile_by_id(&app.state::<AppState>(), id)?.mirror_mode;
-    if mirror && !confirmed {
-        start_dry_run(&app, id)
+    if !confirmed {
+        start_dry_run(&app, id, false)
     } else {
         start_sync(&app, id)
     }
@@ -1370,7 +1430,46 @@ fn sync_now(app: AppHandle, profile_id: String, confirmed: bool) -> Result<(), S
 
 #[tauri::command]
 fn dry_run(app: AppHandle, profile_id: String) -> Result<(), String> {
-    start_dry_run(&app, parse_id(profile_id)?)
+    start_dry_run(&app, parse_id(profile_id)?, false)
+}
+
+#[tauri::command]
+fn cleanup_plan(app: AppHandle, profile_id: String) -> Result<CleanupView, String> {
+    let id = parse_id(profile_id)?;
+    let profile = profile_by_id(&app.state::<AppState>(), id)?;
+    let dest = PathBuf::from(profile.expanded_dest_path());
+    let plan = syncdrop_core::cleanup::plan_cleanup(&dest).map_err(|e| e.to_string())?;
+    Ok(CleanupView {
+        total_bytes: plan.total_bytes,
+        targets: plan
+            .targets
+            .into_iter()
+            .map(|t| CleanupTargetView {
+                relative_path: t.relative_path,
+                bytes: t.bytes,
+            })
+            .collect(),
+    })
+}
+
+#[tauri::command]
+fn cleanup_apply(app: AppHandle, profile_id: String) -> Result<CleanupView, String> {
+    let id = parse_id(profile_id)?;
+    let profile = profile_by_id(&app.state::<AppState>(), id)?;
+    let dest = PathBuf::from(profile.expanded_dest_path());
+    let plan = syncdrop_core::cleanup::plan_cleanup(&dest).map_err(|e| e.to_string())?;
+    syncdrop_core::cleanup::apply_cleanup(&dest, &plan).map_err(|e| e.to_string())?;
+    Ok(CleanupView {
+        total_bytes: plan.total_bytes,
+        targets: plan
+            .targets
+            .into_iter()
+            .map(|t| CleanupTargetView {
+                relative_path: t.relative_path,
+                bytes: t.bytes,
+            })
+            .collect(),
+    })
 }
 
 #[tauri::command]

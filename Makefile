@@ -1,4 +1,4 @@
-.PHONY: desktop desktop-test desktop-run clean release
+.PHONY: desktop desktop-test desktop-run desktop-cli clean release
 
 CARGO ?= $(HOME)/.cargo/bin/cargo
 VERSION := $(shell awk -F= '/^MARKETING_VERSION=/{print $$2}' version.env)
@@ -11,6 +11,9 @@ desktop-test:
 
 desktop-run:
 	cd desktop && $(CARGO) run -p syncdrop
+
+desktop-cli:
+	cd desktop && $(CARGO) build -p syncdrop-cli --release
 
 clean:
 	cd desktop && $(CARGO) clean

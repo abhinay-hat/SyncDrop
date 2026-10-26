@@ -23,6 +23,18 @@ pub fn default_excludes() -> Vec<String> {
         .collect()
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_confirm_bytes() -> u64 {
+    5 * 1024 * 1024 * 1024
+}
+
+fn default_confirm_files() -> u64 {
+    20_000
+}
+
 /// One sync pairing. The SMB password is not stored here — it belongs in the
 /// OS keyring, keyed by profile id (see the NAS module).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +53,21 @@ pub struct SyncProfile {
     pub auto_eject: bool,
     pub keep_versions: bool,
     pub excludes: Vec<String>,
+    /// Honour `.gitignore`, `.ignore`, and `.git/info/exclude` while walking the source.
+    #[serde(default = "default_true")]
+    pub respect_gitignore: bool,
+    /// Skip built-in dependency and cache folders even without a gitignore.
+    #[serde(default = "default_true")]
+    pub skip_dependency_caches: bool,
+    /// When true (default), copy `.git` so repos stay restorable.
+    #[serde(default = "default_true")]
+    pub keep_git: bool,
+    /// Auto-sync asks for confirmation when the plan copies more than this many bytes.
+    #[serde(default = "default_confirm_bytes")]
+    pub confirm_bytes_threshold: u64,
+    /// Auto-sync asks for confirmation when the plan touches more than this many files.
+    #[serde(default = "default_confirm_files")]
+    pub confirm_files_threshold: u64,
     /// Hostname or IP. `None` or empty means this profile has no NAS share.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nas_host: Option<String>,
@@ -69,10 +96,23 @@ impl SyncProfile {
             auto_eject: false,
             keep_versions: false,
             excludes: default_excludes(),
+            respect_gitignore: true,
+            skip_dependency_caches: true,
+            keep_git: true,
+            confirm_bytes_threshold: default_confirm_bytes(),
+            confirm_files_threshold: default_confirm_files(),
             nas_host: None,
             nas_share: None,
             nas_username: None,
             auto_mount_nas: false,
+        }
+    }
+
+    pub fn ignore_options(&self) -> crate::smart_ignore::IgnoreOptions {
+        crate::smart_ignore::IgnoreOptions {
+            respect_gitignore: self.respect_gitignore,
+            skip_dependency_caches: self.skip_dependency_caches,
+            keep_git: self.keep_git,
         }
     }
 

@@ -14,6 +14,7 @@ log = "0.4"
 # Phase 2–4 deps, declared now so those phases don't edit this file.
 globset = "0.4"
 walkdir = "2"
+ignore = "0.4"
 filetime = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
