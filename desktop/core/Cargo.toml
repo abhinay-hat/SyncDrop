@@ -1,6 +1,6 @@
 [package]
 name = "syncdrop-core"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "SyncDrop core: profiles, config, and sync progress"
 publish = false

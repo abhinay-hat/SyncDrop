@@ -23,7 +23,7 @@ SyncDrop is a tray app for macOS (menu bar), Windows, and Linux (system tray), p
 
 The desktop copy engine is Rust. It does not shell out to rsync.
 
-> **Early release (v0.1.0).** Expect rough edges. Try it first on a folder you have another copy of, and [tell me what breaks](#feedback).
+> **Early release (v0.1.1).** Expect rough edges. Try it first on a folder you have another copy of, and [tell me what breaks](#feedback).
 
 | | macOS | Windows | Linux | Android |
 |--|:--:|:--:|:--:|:--:|
@@ -43,12 +43,12 @@ Installers for the current release are on **[GitHub Releases](https://github.com
 
 | Platform | File |
 |----------|------|
-| macOS Apple silicon | [`SyncDrop_0.1.0_aarch64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_aarch64.dmg) |
-| macOS Intel | [`SyncDrop_0.1.0_x64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_x64.dmg) |
-| Windows | [`SyncDrop_0.1.0_x64-setup.exe`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_x64-setup.exe) |
-| Linux AppImage | [`SyncDrop_0.1.0_amd64.AppImage`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_amd64.AppImage) |
-| Linux deb | [`SyncDrop_0.1.0_amd64.deb`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.0_amd64.deb) |
-| Android | [`SyncDrop-android-v0.1.0.apk`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop-android-v0.1.0.apk) |
+| macOS Apple silicon | [`SyncDrop_0.1.1_aarch64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.1_aarch64.dmg) |
+| macOS Intel | [`SyncDrop_0.1.1_x64.dmg`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.1_x64.dmg) |
+| Windows | [`SyncDrop_0.1.1_x64-setup.exe`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.1_x64-setup.exe) |
+| Linux AppImage | [`SyncDrop_0.1.1_amd64.AppImage`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.1_amd64.AppImage) |
+| Linux deb | [`SyncDrop_0.1.1_amd64.deb`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop_0.1.1_amd64.deb) |
+| Android | [`SyncDrop-android-v0.1.1.apk`](https://github.com/abhinay-hat/SyncDrop/releases/latest/download/SyncDrop-android-v0.1.1.apk) |
 
 
 Not sure which Mac you have? Apple menu > **About This Mac**. "Apple M1/M2/M3/M4" means Apple silicon; "Intel" means Intel.
@@ -63,8 +63,8 @@ The builds are not signed yet, so each OS warns you once.
   ```
   SyncDrop lives in the menu bar, not the Dock.
 - **Windows:** SmartScreen shows "Windows protected your PC". Click **More info > Run anyway**.
-- **Linux deb:** `sudo apt install ./SyncDrop_0.1.0_amd64.deb`
-- **Linux AppImage:** `chmod +x SyncDrop_0.1.0_amd64.AppImage`, then run it. On Ubuntu 22.04 and later you may need `sudo apt install libfuse2` first.
+- **Linux deb:** `sudo apt install ./SyncDrop_0.1.1_amd64.deb`
+- **Linux AppImage:** `chmod +x SyncDrop_0.1.1_amd64.AppImage`, then run it. On Ubuntu 22.04 and later you may need `sudo apt install libfuse2` first.
 - **Android:** Android 8.0 or later. The release APK is built with `assembleRelease` (not debuggable) and signed with the Android debug keystore in CI so it installs without a Play Store key. Allow your browser or file manager to install unknown apps when Android asks. You need a USB OTG adapter or a USB-C drive.
 
 **Known issues in v0.1.0** (fixed on main for 0.1.1)
@@ -182,7 +182,7 @@ See [`Scripts/sign-and-notarize.sh`](Scripts/sign-and-notarize.sh).
 
 ```bash
 make release
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.1.1 && git push origin v0.1.1
 ```
 
 If these repo **secrets** are set, macOS builds are signed (and notarized when the Apple ID secrets are present). When they are absent, the build is unsigned:
