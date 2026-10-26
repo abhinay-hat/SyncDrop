@@ -4,9 +4,6 @@ Source critique: `.impeccable/critique/2026-10-14T23-20-32Z__desktop-app-ui-inde
 Mode: **Operate** (task tool). Tone: **native utility, sharper**. Scope: **all issues P0–P3**.
 Priority order: safety + status first, then structure, then accessibility, then polish.
 
-Read before editing: `~/.claude/skills/impeccable/reference/craft-floor.md`,
-`~/.claude/skills/impeccable/reference/operate.md`, `~/.claude/skills/impeccable/reference/polish.md`.
-
 ## Visual direction
 
 - Feels like macOS System Settings / a well-made menu-bar utility, not a web dashboard. Windows/Linux
@@ -73,14 +70,11 @@ Read before editing: `~/.claude/skills/impeccable/reference/craft-floor.md`,
 - Say "drive" only for the physical disk; Google Drive is always "Google Drive".
 - Explain globs inline with 2 examples (`*.tmp`, `node_modules`). Placeholders are clearly examples
   ("e.g. Extreme Pro").
-- Google setup: 3 numbered steps with the console link; show the redirect URI to paste.
+- Google setup: 3 numbered steps with the console link; Desktop app OAuth (no redirect URI to configure).
 - Empty first-run state: "Plug in a drive or choose a folder to start" with the 3 steps.
 - Numbers formatted with locale separators; "Succeeded" / "Failed" badges with failure reason on hover
   and in a details row.
 
 ## Verify
 
-- `node ~/.claude/skills/impeccable/scripts/detect.mjs --json desktop/app/ui/index.html desktop/app/ui/popup.html`
-  must report no `flat-type-hierarchy`. (If it falls back to regex, install its 4 parser deps in a temp
-  copy as the critique did; never inside the skill folder.)
 - cargo build zero warnings, cargo test green, app launches 10 s with no panic.

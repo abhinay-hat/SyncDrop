@@ -41,3 +41,11 @@ desktop/target/
 # Design critique snapshots
 .impeccable/
 .playwright-cli/
+
+# Agent / AI instruction files (keep out of the public repo)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
+.cursor/
+docs/superpowers/

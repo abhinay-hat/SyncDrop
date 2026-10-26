@@ -118,4 +118,4 @@ Port `AppDelegate.swift`, `MenuBarController.swift`, `SettingsView.swift`, `Sync
 - One-time import: on first launch on macOS, if `config.json` is missing, read old profiles from
   `defaults export <bundle id> -` (Swift app's UserDefaults) and convert.
 - Delete `Sources/`, `Tests/`, `Package.swift`, Swift Makefile targets.
-  Update `CLAUDE.md` + `.claude/rules/` (replace macos-architecture.md with desktop-architecture.md).
+  Update internal architecture notes if you keep any (not shipped in the public tree).
