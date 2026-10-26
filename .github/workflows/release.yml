@@ -37,9 +37,11 @@ jobs:
     steps:
       - name: Validate release tag
         id: tag
+        shell: bash
+        env:
+          RAW: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          RAW="${{ github.event.inputs.tag || github.ref_name }}"
           # workflow_dispatch must not checkout arbitrary refs; tags only.
           if [[ ! "$RAW" =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then
             echo "Refusing non-version tag: $RAW" >&2
@@ -126,9 +128,11 @@ jobs:
     steps:
       - name: Validate release tag
         id: tag
+        shell: bash
+        env:
+          RAW: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          RAW="${{ github.event.inputs.tag || github.ref_name }}"
           if [[ ! "$RAW" =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then
             echo "Refusing non-version tag: $RAW" >&2
             exit 1
