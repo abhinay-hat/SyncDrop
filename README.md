@@ -65,7 +65,7 @@ The builds are not signed yet, so each OS warns you once.
 - **Windows:** SmartScreen shows "Windows protected your PC". Click **More info > Run anyway**.
 - **Linux deb:** `sudo apt install ./SyncDrop_0.1.0_amd64.deb`
 - **Linux AppImage:** `chmod +x SyncDrop_0.1.0_amd64.AppImage`, then run it. On Ubuntu 22.04 and later you may need `sudo apt install libfuse2` first.
-- **Android:** Android 8.0 or later. The release APK is not Play Store signed, so allow your browser or file manager to install unknown apps when Android asks. You need a USB OTG adapter or a USB-C drive.
+- **Android:** Android 8.0 or later. The release APK is built with `assembleRelease` (not debuggable) and signed with the Android debug keystore in CI so it installs without a Play Store key. Allow your browser or file manager to install unknown apps when Android asks. You need a USB OTG adapter or a USB-C drive.
 
 **Known issues in v0.1.0**
 

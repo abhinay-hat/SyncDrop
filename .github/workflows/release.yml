@@ -53,38 +53,48 @@ jobs:
         with:
           workspaces: desktop
 
-      # Blank secrets stay unset. An empty APPLE_CERTIFICATE is still "set"
-      # and Tauri tries to import it, which fails the unsigned build.
-      - name: Apple signing env
+      # Do not write Apple secrets to GITHUB_ENV (they would persist for later
+      # steps). Detect whether a cert is present, then pass secrets only as
+      # step env on the signed tauri-action invocation.
+      - name: Detect Apple signing secrets
+        id: apple
         if: runner.os == 'macOS'
         env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          if [ -n "${APPLE_CERTIFICATE}" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: tauri-apps/tauri-action@action-v0.6.2
+        if: runner.os != 'macOS' || steps.apple.outputs.signed != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop/app
+          args: ${{ matrix.args }}
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: SyncDrop v__VERSION__
+          releaseDraft: false
+          prerelease: false
+          releaseBody: |
+            macOS unsigned: right-click > Open, or `xattr -dr com.apple.quarantine` on the app.
+            Windows SmartScreen: More info > Run anyway.
+            Linux AppImage: `chmod +x` before launching.
+
+      - uses: tauri-apps/tauri-action@action-v0.6.2
+        if: runner.os == 'macOS' && steps.apple.outputs.signed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          add_secret() {
-            if [ -n "$2" ]; then
-              {
-                echo "${1}<<SYNCDROP_ENV"
-                echo "$2"
-                echo "SYNCDROP_ENV"
-              } >> "$GITHUB_ENV"
-            fi
-          }
-          add_secret APPLE_CERTIFICATE "$APPLE_CERTIFICATE"
-          add_secret APPLE_CERTIFICATE_PASSWORD "$APPLE_CERTIFICATE_PASSWORD"
-          add_secret APPLE_SIGNING_IDENTITY "$APPLE_SIGNING_IDENTITY"
-          add_secret APPLE_ID "$APPLE_ID"
-          add_secret APPLE_PASSWORD "$APPLE_PASSWORD"
-          add_secret APPLE_TEAM_ID "$APPLE_TEAM_ID"
-
-      - uses: tauri-apps/tauri-action@action-v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop/app
           args: ${{ matrix.args }}
@@ -112,9 +122,9 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: android
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleRelease
 
       - name: Upload APK to the release
         env:
@@ -124,5 +134,5 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VER="${TAG#v}"
           APK="SyncDrop-android-v${VER}.apk"
-          mv android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+          mv android/app/build/outputs/apk/release/app-release.apk "$APK"
           gh release upload "$TAG" "$APK" --clobber
