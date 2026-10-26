@@ -781,7 +781,7 @@ document.getElementById("profile-list").addEventListener("keydown", (event) => {
 });
 
 document.querySelectorAll("input, select").forEach((el) => {
-  if (["log-search", "log-level", "new-name", "exclude-input", "redirect-uri"].includes(el.id)) return;
+  if (["log-search", "log-level", "new-name", "exclude-input"].includes(el.id)) return;
   const touch = () => {
     markDirty();
     if (el.name === "target") {
@@ -948,17 +948,6 @@ document.getElementById("clear-password").onclick = async () => {
   }
 };
 
-document.getElementById("copy-redirect").onclick = async () => {
-  try {
-    const uri = await invoke("google_redirect_uri");
-    document.getElementById("redirect-uri").value = uri;
-    await navigator.clipboard.writeText(uri);
-    toast("Redirect URI copied");
-  } catch (err) {
-    toast(String(err), true);
-  }
-};
-
 document.getElementById("open-console").onclick = () => {
   invoke("open_external", { url: "https://console.cloud.google.com/apis/credentials" })
     .catch((err) => toast(String(err), true));
@@ -1060,10 +1049,6 @@ document.getElementById("save-hint").textContent = apple ? "⌘S" : "Ctrl+S";
 invoke("app_version").then((version) => {
   document.getElementById("app-version").textContent = version;
 }).catch(() => {});
-invoke("google_redirect_uri").then((uri) => {
-  document.getElementById("redirect-uri").value = uri;
-}).catch(() => {});
-
 logTimer = setInterval(refreshLogs, 2000);
 
 selectTab("sync");

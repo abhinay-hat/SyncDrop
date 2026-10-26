@@ -970,7 +970,7 @@ fn finish_sync(
             }
         }
         SyncEnd::Err(message) => {
-            log::error!("sync failed: {message}");
+            log::error!("sync failed: {}", redact_secret(&message));
             let duration = {
                 let mut progress = lock(&state.progress);
                 progress.state = State::Error(message.clone());
@@ -1415,7 +1415,7 @@ fn get_recent_logs(limit: usize) -> Vec<String> {
 #[tauri::command]
 fn open_logs_folder(app: AppHandle) -> Result<(), String> {
     let dir = log_dir();
-    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    ensure_private_dir(&dir).map_err(|err| err.to_string())?;
     app.opener()
         .open_path(dir.to_string_lossy().as_ref(), None::<&str>)
         .map_err(|err| err.to_string())
@@ -1457,10 +1457,21 @@ fn log_dir() -> PathBuf {
         .join("logs")
 }
 
+/// Create `dir` (and parents) and, on Unix, clamp mode to 0o700.
+fn ensure_private_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
 fn init_logging() {
     use tracing_subscriber::prelude::*;
     let dir = log_dir();
-    if std::fs::create_dir_all(&dir).is_err() {
+    if ensure_private_dir(&dir).is_err() {
         return;
     }
     let appender = match tracing_appender::rolling::Builder::new()
@@ -1478,8 +1489,17 @@ fn init_logging() {
     let (writer, guard) = tracing_appender::non_blocking(appender);
     let _ = LOG_GUARD.set(guard);
     let _ = tracing_log::LogTracer::init();
+    // Keep noisy third-party crates at info even when RUST_LOG raises the default.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
+        .add_directive("reqwest=info".parse().expect("directive"))
+        .add_directive("hyper=info".parse().expect("directive"))
+        .add_directive("h2=info".parse().expect("directive"))
+        .add_directive("rustls=info".parse().expect("directive"))
+        .add_directive("tokio=info".parse().expect("directive"))
+        .add_directive("tauri=info".parse().expect("directive"))
+        .add_directive("tao=info".parse().expect("directive"))
+        .add_directive("wry=info".parse().expect("directive"));
     let subscriber = tracing_subscriber::registry().with(filter).with(
         tracing_subscriber::fmt::layer()
             .with_ansi(false)

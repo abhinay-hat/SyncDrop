@@ -150,18 +150,12 @@
 
           <div data-target="google" hidden>
             <ol class="steps-list">
-              <li>Create a Desktop OAuth client and enable the Drive API.</li>
-              <li>Paste the redirect URI below into that client.</li>
-              <li>Save the client ID and secret here, then sign in.</li>
+              <li>In Google Cloud, enable the Drive API and create an OAuth client of type <strong>Desktop app</strong> (no redirect URI to configure).</li>
+              <li>Paste the client ID and client secret below.</li>
+              <li>Click Sign in. SyncDrop opens your browser and finishes OAuth on a local loopback port.</li>
             </ol>
-            <div class="field">
-              <label for="redirect-uri">Redirect URI</label>
-              <div class="row">
-                <input id="redirect-uri" type="text" readonly spellcheck="false" value="http://127.0.0.1/oauth2callback">
-                <button id="copy-redirect" type="button">Copy</button>
-                <button id="open-console" type="button">Cloud console</button>
-              </div>
-              <p class="help">Sign-in listens on this path. The port is chosen when you sign in.</p>
+            <div class="actions">
+              <button id="open-console" type="button">Cloud console</button>
             </div>
             <p id="google-state" class="help">Not signed in</p>
             <div class="field">

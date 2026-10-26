@@ -293,7 +293,7 @@ document.getElementById("open-logs").onclick = () => {
 document.getElementById("eject").onclick = () => {
   invoke("get_state").then((state) => {
     const profile = profileFor(state);
-    if (!profile) return;
+    if (!profile) return Promise.reject(new Error("no profile"));
     return invoke("eject", { profileId: profile.id });
   }).then(() => {
     ejected = true;
