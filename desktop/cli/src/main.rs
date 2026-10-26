@@ -106,6 +106,9 @@ fn run() -> Result<ExitCode, String> {
             for t in &plan.targets {
                 println!("  {} ({} bytes)", t.relative_path, t.bytes);
             }
+            if plan.skipped > 0 {
+                println!("skipped {} unreadable entries (left untouched)", plan.skipped);
+            }
             if dry_run {
                 println!("dry-run: nothing deleted");
                 return Ok(ExitCode::SUCCESS);
